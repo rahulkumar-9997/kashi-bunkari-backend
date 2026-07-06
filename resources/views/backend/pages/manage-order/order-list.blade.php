@@ -1,0 +1,91 @@
+@extends('backend.layouts.master')
+@section('title','Manage Order')
+@section('main-content')
+@push('styles')
+<style>
+    .disabled-dropdown {
+        pointer-events: none !important;
+        opacity: 0.6;
+    }
+</style>
+@endpush
+@php
+    $order_status_id = request()->query('order-status');
+@endphp
+<!-- Start Container Fluid -->
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-xl-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center gap-1">
+                    <h4 class="card-title flex-grow-1">All Order List</h4>
+                    <!-- <a href="javascript:void(0)" 
+                    data-category-popup="true" 
+                    data-size="lg" 
+                    data-title="Add Category" 
+                    data-url="{{ route('category.create') }}" 
+                    data-bs-toggle="tooltip" 
+                    title="Add Category" 
+                    class="btn btn-sm btn-primary">
+                    Add Category
+                </a> -->
+                </div>
+                <div class="card-body">
+                    @if (isset($orders_status) && $orders_status->count() > 0)
+                        @foreach($orders_status as $status)
+                            @php
+                                $currentStatus = request()->query('order-status', 1);
+                                $isActive = $currentStatus == $status->id;
+                            @endphp                            
+                            <a href="{{ route('order-list', ['order-status' => $status->id]) }}" 
+                            class="btn rounded-pill {{ $isActive ? 'active' : '' }}"
+                            style="
+                                background-color: {{ $isActive ? $status->color : 'transparent' }};
+                                border-color: {{ $status->color }};
+                                color: {{ $isActive ? '#fff' : $status->color }};
+                                transition: all 0.3s ease;
+                            ">
+                                {{ $status->name }}                                
+                            </a>
+                        @endforeach
+                    @endif
+                    <div class="table-responsive1" style="margin-top: 20px;" id="order-list-table">
+                        @include('backend.pages.manage-order.partials.order-list-table', ['orders' => $orders, 'orders_status' => $orders_status, 'order_status_id' => $order_status_id])
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- End Container Fluid -->
+<!-- Modal -->
+@include('backend.layouts.common-modal-form')
+<!-- modal--->
+@endsection
+@push('scripts')
+<script src="{{asset('backend/assets/js/pages/order-list.js')}}?v={{ env('ASSET_VERSION', '1.0.0') }}" type="text/javascript"></script>
+<script>
+    $(document).ready(function() {
+        $('.show_confirm').click(function (event) {
+            var form = $(this).closest("form");
+            var name = $(this).data("name");
+            event.preventDefault();
+
+            Swal.fire({
+                title: `Are you sure you want to delete this ${name}?`,
+                text: "If you delete this, it will be gone forever.",
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: "Yes, delete it!",
+                cancelButtonText: "Cancel",
+                dangerMode: true,
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        });
+
+    });
+</script>
+@endpush
