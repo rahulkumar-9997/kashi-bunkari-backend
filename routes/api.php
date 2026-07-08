@@ -13,8 +13,6 @@ use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\ContactController;
-use App\Http\Controllers\Api\CustomMadeBagController;
-use App\Http\Controllers\Api\IndustryController;
 use App\Http\Controllers\Api\ProductEnquiryController;
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -43,9 +41,7 @@ Route::post('product/enquiry', [ProductEnquiryController::class, 'productEnquiry
 
 Route::post('/contact-submit', [ContactController::class, 'submit']);
 
-Route::post('/custom-made-bags/submit', [CustomMadeBagController::class, 'customMadeFormSubmit']);
-Route::get('industry-category', [IndustryController::class, 'industryCategoryList']);
-Route::get('industry-category/{slug}', [IndustryController::class, 'industryDetails']);
+
 Route::prefix('customer')->group(function () {
     /* Public APIs */
     Route::controller(CustomerAuthController::class)->group(function () {        

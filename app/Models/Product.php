@@ -157,12 +157,7 @@ class Product extends Model
     public function carts()
     {
         return $this->hasMany(Cart::class, 'product_id');
-    }
-
-    public function industries()
-    {
-        return $this->belongsToMany(Industry::class, 'industry_product');
-    }
+    }    
     
     public function tags(): BelongsToMany
     {

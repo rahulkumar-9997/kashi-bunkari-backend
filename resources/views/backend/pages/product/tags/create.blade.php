@@ -89,7 +89,7 @@
                         </div>
                     </div>
                     <div class="text-end">
-                        <a href="{{ route('manage-industry.index') }}" class="btn btn-secondary">Cancel</a>
+                        <a href="{{ route('tags.index') }}" class="btn btn-secondary">Cancel</a>
                         <button type="submit" class="btn btn-primary" id="submitBtn">Submit</button>
                     </div>
                 </form>

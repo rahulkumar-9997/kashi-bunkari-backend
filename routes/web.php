@@ -28,7 +28,6 @@ use App\Http\Controllers\Backend\FaqController;
 use App\Http\Controllers\Backend\StorageController;
 use App\Http\Controllers\Backend\RelatedProductController;
 use App\Http\Controllers\Backend\PrimaryCategoryController;
-use App\Http\Controllers\Backend\IndustryController;
 use App\Http\Controllers\Backend\MagicAiImageGeneratorController;
 use App\Http\Controllers\Backend\TagController;
 
@@ -198,14 +197,7 @@ Route::group(['middleware' => ['auth:web']], function() {
     Route::resource('manage-testimonials', TestimonialsController::class);
     Route::resource('manage-blog', BlogController::class);
     Route::resource('manage-faq', FaqController::class);
-
-    Route::Resource('manage-industry', IndustryController::class);
-    Route::get('industry-category', [IndustryController::class, 'industryCategoryIndex'])->name('industry-category.index');
-    Route::get('industry-category/create', [IndustryController::class, 'industryCategoryCreate'])->name('industry-category.create');
-    Route::POST('industry-category/store', [IndustryController::class, 'industryCategoryStore'])->name('industry-category.store');
-    Route::get('industry-category/{id}/edit', [IndustryController::class, 'industryCategoryEdit'])->name('industry-category.edit');
-    Route::put('industry-category/{id}/update', [IndustryController::class, 'industryCategoryUpdate'])->name('industry-category.update');
-    Route::delete('industry-category/{id}/delete', [IndustryController::class, 'industryCategoryDelete'])->name('industry-category.destroy');
+    
     Route::Resource('magic-ai-image-generator', MagicAiImageGeneratorController::class);
 
     Route::middleware(['auth'])->group(function () {

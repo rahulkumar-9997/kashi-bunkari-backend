@@ -170,8 +170,7 @@
          'manage-blog.index', 'manage-blog.create', 'manage-blog.edit',
          'manage-faq.index', 'manage-faq.create', 'manage-faq.edit',
          'primary-category.index', 'primary-category.create', 'primary-category.edit',
-         'manage-industry.index', 'manage-industry.create', 'manage-industry.edit',
-         'industry-category.index'
+       
          ];
          $isOtherActive = in_array($currentRoute, $otherRoutes);
          @endphp
@@ -188,15 +187,7 @@
                <span class="nav-text">Manage Other Section</span>
             </a>
             <div class="collapse {{ $isOtherActive ? 'show' : '' }}" id="sidebar_banner">
-               <ul class="nav sub-navbar-nav">
-                  <li class="sub-nav-item">
-                     <a class="sub-nav-link {{ request()->routeIs('industry-category.*') ? 'active' : '' }}" href="{{ route('industry-category.index') }}">
-                        Industry Category
-                     </a>
-                     <a class="sub-nav-link {{ request()->routeIs('manage-industry.*') ? 'active' : '' }}" href="{{ route('manage-industry.index') }}">
-                        Manage Industry
-                     </a>
-                  </li>
+               <ul class="nav sub-navbar-nav">                  
                   <li class="sub-nav-item">
                      <a class="sub-nav-link {{ request()->routeIs('primary-category.*') ? 'active' : '' }}" href="{{ route('primary-category.index') }}">Primary Category</a>
                   </li>
