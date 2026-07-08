@@ -250,7 +250,7 @@ class ProductController extends Controller
                 ];
             })
             ->values();
-            $siteName = "Nova SAC";
+            $siteName = "Kasi Bunkari";
             $categoryTitle = $category->title;
             $attributeName = $attributeValue->name;
             $fallbackTitle = $attributeName . ' ' . $categoryTitle . ' | ' . $siteName;
@@ -492,7 +492,7 @@ class ProductController extends Controller
                 ];
             });
             /* ================= META ================= */
-            $siteName = "Nova SAC";
+            $siteName = "Kasi Bunkari";
             $categoryTitle = $primary_category->title ?? $category->title;
             $shortHeading = $primary_category->short_heading ?? null;
             $titleRaw = $primary_category && !empty($primary_category->meta_title)

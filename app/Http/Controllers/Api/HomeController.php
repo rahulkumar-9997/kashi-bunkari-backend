@@ -270,47 +270,8 @@ class HomeController extends Controller
             'data' => $testimonials,
             'total' => $testimonials->count()
         ]);
-    } 
+    }    
     
-    public function homeBlogList()
-    {
-        
-        $blogs = Blog::where('status', 'published')
-        ->select(
-            'id',
-            'title',
-            'slug',
-            'short_desc',
-            'content',
-            'main_image',
-            'page_image',
-            'published_at'
-        )
-        ->orderBy('published_at', 'desc')
-        ->take(4)
-        ->get()
-        ->map(function ($blog) {
-            return [
-                'id' => $blog->id,
-                'title' => $blog->title,
-                'slug' => $blog->slug,
-                'short_desc' => $blog->short_desc ?: null,
-                'content' => $blog->content ?: null,
-                'main_image' => $blog->main_image
-                    ? asset('storage/images/blogs/main/' . $blog->main_image)
-                    : null,
-                'published_at' => $blog->published_at
-                    ? \Carbon\Carbon::parse($blog->published_at)->format('d M Y')
-                    : null,
-            ];
-        });
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Blog list',
-            'data' => $blogs
-        ]);
-    }
     
     public function homeFaq()
     {

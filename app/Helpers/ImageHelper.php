@@ -25,7 +25,7 @@ class ImageHelper
      * @param string $prefix
      * @return string
      */
-    public static function generateFileName($name, $prefix = 'nova-sac')
+    public static function generateFileName($name, $prefix = 'kasi-bunkari')
     {
         date_default_timezone_set('Asia/Kolkata');
         $cleanName = preg_replace('/[^A-Za-z0-9\-]/', '', str_replace(' ', '-', strtolower($name)));
@@ -161,7 +161,7 @@ class ImageHelper
         $width = 250,
         $height = 250,
         $oldImage = null,
-        $prefix = 'nova-sac'
+        $prefix = 'kasi-bunkari'
     ) {
 
         $fileName = $name.'.jpg';

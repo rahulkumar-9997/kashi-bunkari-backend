@@ -9,6 +9,7 @@ class Blog extends Model
     protected $table = 'blogs';
     protected $fillable = [
         'title',
+        'reading_title',
         'slug',
         'short_desc',
         'content',
@@ -16,7 +17,9 @@ class Blog extends Model
         'meta_description',
         'main_image',
         'page_image',
+        'tags',
         'status',
+        'view_count',
         'published_at'
     ];
 

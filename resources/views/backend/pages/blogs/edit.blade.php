@@ -107,7 +107,7 @@
                                     
                                     @if($blog->main_image)
                                     <div class="mt-2" id="currentMainImageContainer">
-                                        <div class="image-item" style="width: 150px; height: 150px;">
+                                        <div class="image-item" style="width: 100px; height: 100px;">
                                             <img src="{{ asset('storage/images/blogs/main/' . $blog->main_image) }}" alt="{{ $blog->title }}">
                                         </div>
                                         <input type="hidden" name="current_main_image" id="currentMainImage" value="{{ $blog->main_image }}">
@@ -115,29 +115,37 @@
                                     @endif
                                 </div>
                             </div>
-                        </div>
-                        <div class="row">
                             <div class="col-sm-4 col-12">
                                 <div class="mb-3">
-                                    <label class="form-label" for="meta_title">Meta Title</label>
+                                    <label class="form-label" for="reading_title">
+                                        Reading Title
+                                    </label>
                                     <input type="text"
-                                        class="form-control @error('meta_title') is-invalid @enderror"
-                                        name="meta_title" id="meta_title" value="{{ old('meta_title', $blog->meta_title) }}" />
-                                    @error('meta_title')
+                                        class="form-control @error('reading_title') is-invalid @enderror"
+                                        id="reading_title"
+                                        name="reading_title"
+                                        value="{{ old('reading_title', $blog->reading_title) }}"
+                                        placeholder="e.g. 5 min read">
+                                    @error('reading_title')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
-                            </div>                            
+                            </div>
                             <div class="col-sm-4 col-12">
                                 <div class="mb-3">
-                                    <label class="form-label" for="meta_description">
-                                        Meta Description
+                                    <label class="form-label" for="tags">
+                                        Tags
                                     </label>
-                                    <textarea
-                                        class="form-control @error('meta_description') is-invalid @enderror"
-                                        id="meta_description" name="meta_description"
-                                        rows="2">{{ old('meta_description', $blog->meta_description) }}</textarea>
-                                    @error('meta_description')
+                                    <input type="text"
+                                        class="form-control @error('tags') is-invalid @enderror"
+                                        id="tags"
+                                        name="tags"
+                                        value="{{ old('tags', $blog->tags) }}"
+                                        placeholder="Fabric Guide, Cotton, Summer Fashion">
+                                    <small class="text-muted">
+                                        Separate multiple tags with commas.
+                                    </small>
+                                    @error('tags')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                     @enderror
                                 </div>
@@ -151,6 +159,34 @@
                                     </select>
                                 </div>
                             </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-sm-6 col-12">
+                                <div class="mb-3">
+                                    <label class="form-label" for="meta_title">Meta Title</label>
+                                    <input type="text"
+                                        class="form-control @error('meta_title') is-invalid @enderror"
+                                        name="meta_title" id="meta_title" value="{{ old('meta_title', $blog->meta_title) }}" />
+                                    @error('meta_title')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>                            
+                            <div class="col-sm-6 col-12">
+                                <div class="mb-3">
+                                    <label class="form-label" for="meta_description">
+                                        Meta Description
+                                    </label>
+                                    <textarea
+                                        class="form-control @error('meta_description') is-invalid @enderror"
+                                        id="meta_description" name="meta_description"
+                                        rows="2">{{ old('meta_description', $blog->meta_description) }}</textarea>
+                                    @error('meta_description')
+                                    <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
+                            
                         </div>
                         <div class="row">                           
                             <div class="col-sm-12 col-12">

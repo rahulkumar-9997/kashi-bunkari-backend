@@ -27,7 +27,8 @@ Route::get('/home/trending-products', [HomeController::class, 'trendingProducts'
 Route::get('/home/client', [HomeController::class, 'client']);
 Route::get('/home/testimonials', [HomeController::class, 'testimonials']);
 Route::get('/home/faq', [HomeController::class, 'homeFaq']);
-Route::get('/home/blog', [HomeController::class, 'homeBlogList']);
+
+Route::get('/home/blog', [BlogController::class, 'homeBlogList']);
 Route::get('blog', [BlogController::class, 'blogList']);
 Route::get('blog/{slug}', [BlogController::class, 'blogDetails']);
 Route::get('search-suggestion', [SearchController::class, 'searchSuggestions']);

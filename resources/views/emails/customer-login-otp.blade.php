@@ -49,7 +49,7 @@
                     </tr>
                 </table>
                 <p style="font-size:12px; color:#aaa; margin-top:15px;">
-                    © {{ date('Y') }} Nova Sac. All rights reserved.
+                    © {{ date('Y') }} <strong>{{ config('app.name') }}</strong>. All rights reserved.
                 </p>
             </td>
         </tr>

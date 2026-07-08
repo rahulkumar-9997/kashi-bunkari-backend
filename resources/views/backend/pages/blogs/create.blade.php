@@ -31,8 +31,7 @@
                                         @enderror
                                     </div>
                                 </div>
-
-                                <div class="col-sm-4 col-12">
+                                 <div class="col-sm-4 col-12">
                                     <div class="mb-3">
                                         <label class="form-label" for="short_description">
                                             Short Description
@@ -59,6 +58,54 @@
                                         @enderror
                                     </div>
                                 </div>
+                                <div class="col-sm-4 col-12">
+                                    <div class="mb-3">
+                                        <label class="form-label" for="reading_title">
+                                            Reading Title
+                                        </label>
+                                        <input type="text"
+                                            class="form-control @error('reading_title') is-invalid @enderror"
+                                            id="reading_title"
+                                            name="reading_title"
+                                            value="{{ old('reading_title') }}"
+                                            placeholder="e.g. 5 min read">
+                                        @error('reading_title')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                </div>
+                                <div class="col-sm-4 col-12">
+                                    <div class="mb-3">
+                                        <label class="form-label" for="tags">
+                                            Tags
+                                        </label>
+                                        <input type="text"
+                                            class="form-control @error('tags') is-invalid @enderror"
+                                            id="tags"
+                                            name="tags"
+                                            value="{{ old('tags') }}"
+                                            placeholder="Fabric Guide, Cotton, Summer Fashion">
+                                        <small class="text-muted">
+                                            Separate multiple tags with commas.
+                                        </small>
+                                        @error('tags')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                </div>
+                                <div class="col-sm-4 col-12">
+                                    <div class="mb-3">
+                                        <label class="form-label" for="status">Status <span class="text-danger">*</span></label>
+                                        <select class="form-control @error('status') is-invalid @enderror" id="status" name="status">                                            
+                                            <option value="published" {{ old('status') == 'published' ? 'selected' : '' }}>Published</option>
+                                            <option value="draft" {{ old('status') == 'draft' ? 'selected' : '' }}>Draft</option>
+                                        </select>
+                                        @error('status')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                        @enderror
+                                    </div>
+                                </div>                               
+                                
                                 <div class="col-sm-4 col-12">
                                     <div class="mb-3">
                                         <label class="form-label" for="meta_title">Meta title</label>

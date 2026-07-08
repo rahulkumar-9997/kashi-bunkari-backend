@@ -201,7 +201,7 @@ class SearchController extends Controller
                 })
                 ->limit(10)
                 ->get(['id','title','slug']);
-            $siteName = "Nova SAC";
+            $siteName = config('app.name');
             $meta = [
                 'title' => ucwords($query) . ' | ' . $siteName,
                 'description' => 'Buy ' . $query . ' online from ' . $siteName . 
