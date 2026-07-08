@@ -22,8 +22,7 @@ class HomeController extends Controller
     public function banner()
     {
         $banners = Cache::remember('home_banners', now()->addHours(24), function () {
-            return Banner::with(['products:id,title,slug'])
-            ->where('status', 1)
+            return Banner::where('status', 1)
             ->orderBy('id', 'desc')
             ->get();
         });
@@ -273,7 +272,7 @@ class HomeController extends Controller
     }    
     
     
-    public function homeFaq()
+    public function faq()
     {
         $faqs = Cache::remember('home_faqs', now()->addHours(24), function () {
             return Faq::select(
