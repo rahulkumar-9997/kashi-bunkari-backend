@@ -20,11 +20,11 @@
 
                 </div>
                 <div class="card-body">
-                    <form method="POST" action="{{ route('manage-testimonials.update',$testimonial->id) }}" enctype="multipart/form-data">
+                    <form method="POST" action="{{ route('manage-testimonials.update',$testimonial->id) }}" enctype="multipart/form-data"  id="editTestimonialForm">
                         @csrf
                         @method('PUT')
                         <div class="row">
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <div class="mb-3">
                                     <label class="form-label">Name *</label>
                                     <input type="text" name="name" value="{{ old('name',$testimonial->name) }}" class="form-control @error('name') is-invalid @enderror">
@@ -33,7 +33,21 @@
                                     @enderror
                                 </div>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">City</label>
+                                    <input type="text"
+                                        name="city"
+                                        value="{{ old('city', $testimonial->city) }}"
+                                        placeholder="Enter city"
+                                        class="form-control @error('city') is-invalid @enderror">
+
+                                    @error('city')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
+                            <div class="col-md-4">
                                 <div class="mb-3">
                                     <label class="form-label">Profile Image</label>
                                     <input type="file" name="profile_image" accept="image/jpeg,image/png,image/jpg,image/webp" class="form-control @error('profile_image') is-invalid @enderror">
@@ -47,13 +61,37 @@
                                     @endif
                                 </div>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Testimonials Content *</label>
+                                    <textarea name="content" class="form-control" rows="2">{{ old('content',$testimonial->content) }}
+                                    </textarea>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Rating</label>
+                                    <select name="rating" class="form-select @error('rating') is-invalid @enderror">
+                                        @for($i = 5; $i >= 1; $i--)
+                                            <option value="{{ $i }}"
+                                                {{ old('rating', $testimonial->rating ?? 5) == $i ? 'selected' : '' }}>
+                                                 {{ $i }}
+                                            </option>
+                                        @endfor
+                                    </select>
+
+                                    @error('rating')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
+                            <div class="col-md-4">
                                 <div class="mb-3">
                                     <label class="form-label">Designation</label>
                                     <input type="text" name="designation" value="{{ old('designation',$testimonial->designation) }}" class="form-control">
                                 </div>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-12">
                                 <div class="mb-3">
                                     <label class="form-label">Status</label>
                                     <div class="form-check form-switch mt-2">
@@ -62,13 +100,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-12">
-                                <div class="mb-3">
-                                    <label class="form-label">Content *</label>
-                                    <textarea name="content" class="form-control" rows="4">{{ old('content',$testimonial->content) }}
-                                    </textarea>
-                                </div>
-                            </div>
+                            
                             <div class="col-12">
                                 <hr>
                                 <div class="d-flex justify-content-end gap-2">
@@ -76,7 +108,7 @@
                                         class="btn btn-secondary">
                                         Cancel
                                     </a>
-                                    <button type="submit" class="btn btn-primary">
+                                    <button type="submit" class="btn btn-primary" id="submitBtn">
                                         Update Testimonial
                                     </button>
                                 </div>
@@ -91,5 +123,11 @@
 @include('backend.layouts.common-modal-form')
 @endsection
 @push('scripts')
-
+<script>
+$('#editTestimonialForm').on('submit', function () {
+    $('#submitBtn')
+        .prop('disabled', true)
+        .html('<i class="fas fa-spinner fa-spin"></i> Updating...');
+});
+</script>
 @endpush

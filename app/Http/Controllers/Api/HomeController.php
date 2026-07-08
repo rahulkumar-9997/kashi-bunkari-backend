@@ -244,32 +244,42 @@ class HomeController extends Controller
 
     public function testimonials()
     {
-        $testimonials = Cache::remember('home_testimonials', now()->addHours(24), function () {
-            return Testimonial::select('id','name','content','designation','profile_img')
-            ->where('status',1)
-            ->orderBy('id','desc')
-            ->limit(10)
-            ->get()
-            ->map(function ($testimonial) {
-                return [
-                    'id' => $testimonial->id,
-                    'name' => $testimonial->name ?? null,
-                    'designation' => $testimonial->designation ?: null,
-                    'content' => $testimonial->content ?? null,
-                    'image' => !empty($testimonial->profile_img)
-                        ? asset('storage/images/testimonials/'.$testimonial->profile_img)
-                        : null,
-                ];
-
-            });
+        $testimonials = Cache::remember('testimonials', now()->addHours(24), function () {
+            return Testimonial::select(
+                    'id',
+                    'name',
+                    'content',
+                    'designation',
+                    'profile_img',
+                    'city',
+                    'rating'
+                )
+                ->where('status', 1)
+                ->latest()
+                ->take(10)
+                ->get()
+                ->map(function ($testimonial) {
+                    return [
+                        'id' => $testimonial->id,
+                        'name' => $testimonial->name,
+                        'designation' => $testimonial->designation,
+                        'city' => $testimonial->city,
+                        'rating' => (int) $testimonial->rating,
+                        'content' => $testimonial->content,
+                        'image' => !empty($testimonial->profile_img)
+                            ? asset('storage/images/testimonials/' . $testimonial->profile_img)
+                            : null,
+                    ];
+                });
         });
+
         return response()->json([
             'success' => true,
             'message' => 'Testimonials retrieved successfully',
             'data' => $testimonials,
-            'total' => $testimonials->count()
+            'total' => $testimonials->count(),
         ]);
-    }    
+    }
     
     
     public function faq()

@@ -15,6 +15,8 @@ class Testimonial extends Model
         'content',
         'profile_img',
         'designation',
+        'city',
+        'rating',
         'status'
     ];
 }

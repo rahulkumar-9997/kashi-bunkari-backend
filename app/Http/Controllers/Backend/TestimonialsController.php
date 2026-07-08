@@ -31,6 +31,8 @@ class TestimonialsController extends Controller
             'name' => 'required|string|max:255',
             'content' => 'required|string',
             'designation' => 'nullable|string|max:255',
+            'city' => 'nullable|string|max:255',
+            'rating' => 'required|integer|min:1|max:5',
             'profile_image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:6144',
             'status' => 'nullable|boolean'
         ]);
@@ -64,10 +66,12 @@ class TestimonialsController extends Controller
                 'slug' => $slug,
                 'content' => $request->content,
                 'designation' => $request->designation ?? null,
+                'city' => $request->city,
+                'rating' => $request->rating,
                 'profile_img' => $imagePath,
                 'status' => $request->status ? true : false
             ]);
-            Cache::forget('home_testimonials');
+            Cache::forget('testimonials');
             DB::commit();
             return redirect('manage-testimonials')->with('success', 'Testimonial created successfully');
         } catch (\Exception $e) {
@@ -88,6 +92,8 @@ class TestimonialsController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'content' => 'required|string',
+            'city' => 'nullable|string|max:255',
+            'rating' => 'required|integer|min:1|max:5',
             'designation' => 'nullable|string|max:255',
             'profile_image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:6144',
             'status' => 'nullable|boolean'
@@ -119,11 +125,13 @@ class TestimonialsController extends Controller
             $testimonial->update([
                 'name' => $request->name,
                 'content' => $request->content,
+                'city' => $request->city,
+                'rating' => $request->rating,
                 'designation' => $request->designation ?? null,
                 'profile_img' => $imagePath,
                 'status' => $request->status ? true : false
             ]);
-            Cache::forget('home_testimonials');
+            Cache::forget('testimonials');
             DB::commit();
             return redirect('manage-testimonials')->with('success', 'Testimonial updated successfully');
         } catch (\Exception $e) {
@@ -144,7 +152,7 @@ class TestimonialsController extends Controller
                 );
             }
             $testimonial->delete();
-            Cache::forget('home_testimonials');
+            Cache::forget('testimonials');
             DB::commit();
             return redirect('manage-testimonials')->with('success', 'Testimonial deleted successfully');
         } catch (\Exception $e) {
