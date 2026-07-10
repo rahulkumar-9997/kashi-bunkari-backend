@@ -169,6 +169,7 @@ class BlogController extends Controller
                 'short_desc',
                 'content',
                 'reading_title',
+				'view_count',
                 'tags',
                 'main_image',
                 'published_at'
@@ -182,12 +183,12 @@ class BlogController extends Controller
                     'title' => $item->title,
                     'slug' => $item->slug,
                     'short_desc' => $item->short_desc
-                        ?? ($item->content
-                            ? Str::limit(strip_tags($item->content), 100)
-                            : null),
-
+                            ?? ($item->content
+                                ? Str::limit(strip_tags($item->content), 100)
+                                : null),
                     'reading_title' => $item->reading_title,
-                    'tags' => $item->tags
+					'view_count' => $blog->view_count,
+                    'tag' => $item->tags
                         ? trim(explode(',', $item->tags)[0])
                         : null,
                     'main_image' => $item->main_image
@@ -203,6 +204,12 @@ class BlogController extends Controller
             'message' => 'Blog details',
             'data' => [
                 'id' => $blog->id,
+				'meta_title' => ($blog->meta_title ?: $blog->title) . ' | Kasi Bunkari',
+                'meta_description' => $blog->meta_description
+                    ?: $blog->short_desc
+                    ?: ($blog->content
+                        ? Str::limit(strip_tags($blog->content), 160)
+                        : null),
                 'title' => $blog->title,
                 'slug' => $blog->slug,
                 'reading_title' => $blog->reading_title,
@@ -212,9 +219,7 @@ class BlogController extends Controller
                 'view_count' => $blog->view_count,
 
                 'short_desc' => $blog->short_desc
-                    ?? ($blog->content
-                        ? Str::limit(strip_tags($blog->content), 160)
-                        : null),
+                    ?? null,
                 'content' => $blog->content,
                 'main_image' => $blog->main_image
                     ? asset('storage/images/blogs/main/' . $blog->main_image)
@@ -224,13 +229,7 @@ class BlogController extends Controller
                     : null,
                 'published_at' => $blog->published_at
                     ? Carbon::parse($blog->published_at)->format('d M Y')
-                    : null,
-                'meta_title' => ($blog->meta_title ?: $blog->title) . ' | Kasi Bunkari',
-                'meta_description' => $blog->meta_description
-                    ?: $blog->short_desc
-                    ?: ($blog->content
-                        ? Str::limit(strip_tags($blog->content), 160)
-                        : null),
+                    : null,                
                 'paragraphs' => $blog->paragraphs->map(function ($para) {
                     return [
                         'title' => $para->title,
