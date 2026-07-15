@@ -153,6 +153,7 @@ Route::group(['middleware' => ['auth:web']], function() {
     Route::POST('/product-update-gst/store', [ProductsController::class, 'updateHSNCodeGstFormSubmit'])->name('product-update-gst.store');
     Route::get('/autocomplete/products-storage', [ProductsController::class, 'autocompleteProductsStorage'])->name('autocomplete.products-storage');
     Route::post('/product/{id}/make-duplicate', [ProductsController::class, 'makeDuplicateProduct'])->name('product.make.duplicate');
+    Route::post('products/{product}/tags', [ProductsController::class, 'updateTags'])->name('product.tags.update');
     /**Product route */ 
     /**inventory route */
     Route::prefix('inventory')->name('inventory.')->group(function () {

@@ -56,31 +56,7 @@
                      </div>
                   </div>
                   <div class="row">
-                     <!--<div class="col-lg-6">
-                        <div class="mb-2">
-                           <label for="label" class="form-label">Product Subcategories</label>
-                           <select class="form-control" id="product_subcategories" data-choices data-choices-groups data-placeholder="Select Subcategories" name="product_subcategories">
-                              <option value="">Choose a categories</option>
-                              <option value="1">Fashion</option>
-                           </select>
-                        </div>
-                     </div>-->
-                     <!--<div class="col-lg-12">
-                        <div class="mb-2">
-                           <label for="brand" class="form-label">Brand *</label>
-                           <select class="form-control" id="brand" data-choices data-choices-groups data-placeholder="Select Brand" name="brand">
-                           <option value="">Choose a Brand</option>
-                              @if ($data['brand_list'] && $data['brand_list']->isNotEmpty())
-                                 @foreach ($data['brand_list'] as $brand)
-                                    <option value="{{ $brand->id }}" {{ $data['product']->brand_id == $brand->id ? 'selected' : '' }}>{{ $brand->title }}</option>
-                                 @endforeach
-                              @endif
-                           </select>
-                        </div>
-                     </div>-->
-                  </div>
-                  <div class="row">
-                     <div class="col-lg-6">
+                     <div class="col-lg-12">
                         <div class="mb-2">
                            <label for="label" class="form-label">Label</label>
                            <select class="form-control" id="label" data-choices data-choices-groups data-placeholder="Select a Label" name="label">
@@ -93,25 +69,6 @@
                            </select>
                         </div>
                      </div>
-                     <div class="col-lg-6">
-                        <div class="mb-2">
-                           <label for="product_tags" class="form-label">Tags</label>
-                           <select class="product_tags js-example-basic-single" name="product_tags" id="product_tags">
-                              <option value="">Choose a Tags</option>
-                              <option value="New" {{ $data['product']->product_tags == 'New' ? 'selected' : '' }}>New</option>
-                              <option value="Digital" {{ $data['product']->product_tags == 'Digital' ? 'selected' : '' }}>Digital</option>
-                           </select>
-                        </div>
-                     </div>
-                     <!--<div class="col-lg-6">
-                        <div class="mb-2">
-                           <label for="product_weight" class="form-label">Product Weight In Gram</label>
-                           <div class="input-group mb-2">
-                              <span class="input-group-text fs-20"><i class='bx bx-weight'></i></span>
-                              <input type="number" id="product_weight" class="form-control" placeholder="000" name="product_weight" value="{{ $data['product']->product_weight }}">
-                           </div>
-                        </div>
-                     </div>-->
                   </div>
                   <div class="row">
                      <div class="col-lg-12">
@@ -339,6 +296,34 @@
             <!--seo meta-->
          </div>
          <div class="col-xl-5 col-lg-5">
+            <!--Product Tags-->
+            <div class="card">
+               <div class="card-header">
+                  <h4 class="card-title">Product Tags</h4>
+               </div>
+               <div class="card-body">
+                  <div class="row">
+                        @foreach($tags as $tag)
+                           <div class="col-md-12 mb-2">
+                              <div class="form-check">
+                                    <input
+                                       class="form-check-input"
+                                       type="checkbox"
+                                       name="tags[]"
+                                       id="tag{{ $tag->id }}"
+                                       value="{{ $tag->id }}"
+                                       {{ $data['product']->tags->contains($tag->id) ? 'checked' : '' }}
+                                    >
+                                    <label class="form-check-label" for="tag{{ $tag->id }}">
+                                       {{ $tag->title }}
+                                    </label>
+                              </div>
+                           </div>
+                        @endforeach
+                  </div>
+               </div>
+            </div>
+            <!--Product Tags-->
             <div class="card">
                <div class="card-header">
                   <h4 class="card-title">Product Dimensions</h4>

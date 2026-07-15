@@ -20,11 +20,11 @@ use App\Models\AdditionalFeature;
 use App\Models\ProductsAdditionalFeature;
 use App\Models\UpdateHsnGstWithAttributes;
 use App\Models\ProductDuplication;
+use App\Models\Tag;
 use Illuminate\Support\Facades\DB;
 use App\Exports\ProductsExport;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\Validator;
-use PhpOffice\PhpSpreadsheet\Shared\Date;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
@@ -33,10 +33,7 @@ use Illuminate\Support\Facades\File;
 
 class ProductsController extends Controller
 {
-    public function index(Request $request){
-        // $data['product_list'] = Product::with(['images', 'category', 'brand', 'attributes.attribute', 'attributes.values.attributeValue'])->orderBy('id', 'desc')->get();
-        // //return response()->json($data['product_list']);
-        // return view('backend.pages.product.index', compact('data'));
+    public function index(Request $request){ 
         $data['categories'] = Category::all(); 
         //Log::info('Request Data:', $request->all());
         $query = Product::withCount('duplications')
@@ -46,6 +43,7 @@ class ProductsController extends Controller
             }, 
             'category', 
             'brand',
+            'tags',
             'attributes.attribute', 
             'attributes.values.attributeValue',
             //'duplications.newProduct',
@@ -54,14 +52,6 @@ class ProductsController extends Controller
         if ($request->has('category_id') && $request->category_id) {
             $query->where('category_id', $request->category_id);
         }
-
-        // if ($request->has('search') && $request->search) {
-        //     $query->where('title', 'like', '%' . $request->search . '%'); 
-        // }
-        // if ($request->has('search') && $request->search) {
-        //     $searchTerm = $request->search . '*'; // Add wildcard
-        //     $query->whereRaw("MATCH(title) AGAINST(? IN BOOLEAN MODE)", [$searchTerm]);
-        // }
         
         if ($request->has('search') && $request->search) {
             $searchTerms = explode(' ', $request->search); 
@@ -86,33 +76,32 @@ class ProductsController extends Controller
             $query->where('product_status', $request->product_status);
         }
 
-        $data['product_list'] = $query->orderBy('id', 'desc')->paginate(50);
-        
+        $data['product_list'] = $query->orderBy('id', 'desc')->paginate(30);
+        $data['tags'] = Tag::where('status', 1)->orderBy('title', 'asc')->get();
         if ($request->ajax()) {
             return view('backend.pages.product.partials.product_table', compact('data'))->render();
         }
+        //return response()->json($data['data']);
         return view('backend.pages.product.index', compact('data'));
                
     }
 
     public function create(Request $request){ 
-        $categoryId = request()->query('category');
-        // $attributesWithValues = UpdateHsnGstWithAttributes::where('category_id', $categoryId)
-        // ->with(['attribute', 'attribute.AttributesValues', 'attribute.AttributesValues.hsnGst'])
-        // ->get();
+        $categoryId = request()->query('category');       
         $attributesWithValues = UpdateHsnGstWithAttributes::where('category_id', $categoryId)
             ->with(['attribute', 'attribute.AttributesValues', 'attribute.AttributesValues.hsnGst'])
             ->get()
             ->groupBy(function ($item) {
                 return $item->attribute->title ?? 'N/A';
             });
+        $tags = Tag::where('status', 1)->orderBy('title', 'asc')->get();
         $excludedTitles = $attributesWithValues->keys()->toArray();
         $data['product_attributes_list'] = Attribute::whereNotIn('title', $excludedTitles)
             ->orderBy('title', 'asc')->get();
         $data['product_category_list'] = Category::where('status', '=', 'on')->orderBy('title', 'asc')->get();
         $data['brand_list'] = Brand::where('status', '=', '1')->orderBy('title', 'asc')->get();
         $data['label_list'] = Label::where('status', '=', '1')->orderBy('title', 'asc')->get();
-        return view('backend.pages.product.create', compact('data', 'attributesWithValues'));
+        return view('backend.pages.product.create', compact('data', 'attributesWithValues', 'tags'));
     } 
 
     public function getFilteredAttributes(Request $request){
@@ -142,7 +131,9 @@ class ProductsController extends Controller
                 'product_name' => 'required|string|max:255',
                 'product_categories' => 'required|exists:category,id',
                 'hsn_code' => 'nullable|regex:/^\d{4}(\d{2}){0,1}(\d{2}){0,1}$/',
-                'gst_in_percentage' => 'nullable|numeric|min:0|max:100',                
+                'gst_in_percentage' => 'nullable|numeric|min:0|max:100',
+                'tags' => 'nullable|array',
+                'tags.*' => 'exists:tags,id',                
             ]);
             //dd( $request->all());
             Log::info('Request Data:', $request->all());
@@ -175,6 +166,7 @@ class ProductsController extends Controller
                 'volumetric_weight_kg' => $request->input('volumetric_weight_kg') ?? null,                
             ];
             $add_product = Product::create($input);
+            $add_product->tags()->sync($request->tags ?? []);
             if ($add_product) {
                 if ($request->hasFile('product_images')) {
                     $files = $request->file('product_images');
@@ -377,12 +369,13 @@ class ProductsController extends Controller
     }
 
     public function edit($id){
+        $tags = Tag::where('status', 1)->orderBy('title', 'asc')->get();
         $data['product'] = Product::with(['images', 'category', 'brand', 'attributes.attribute', 'attributes.values.attributeValue', 'additionalFeatures.feature'])->findOrFail($id);
         $data['product_attributes_list'] = Attribute::orderBy('title', 'asc')->get();
         $data['product_category_list'] = Category::where('status', '=', 'on')->orderBy('title', 'asc')->get();
         $data['brand_list'] = Brand::where('status', '=', 'on')->orderBy('title', 'asc')->get();
         $data['label_list'] = Label::where('status', '=', 'on')->orderBy('title', 'asc')->get();
-        return view('backend.pages.product.edit', compact('data'));
+        return view('backend.pages.product.edit', compact('data', 'tags'));
         //return response()->json($data['product']);
     }
 
@@ -405,7 +398,9 @@ class ProductsController extends Controller
                 ],
                 'product_categories' => 'required',
                 'hsn_code' => 'nullable|regex:/^\d{4}(\d{2}){0,1}(\d{2}){0,1}$/',
-                'gst_in_percentage' => 'nullable|numeric|min:0|max:100',               
+                'gst_in_percentage' => 'nullable|numeric|min:0|max:100',
+                'tags' => 'nullable|array',
+                'tags.*' => 'exists:tags,id',                  
             ]);
             $update_product_row = Product::findOrFail($id);
             /*make unique slug */
@@ -439,6 +434,7 @@ class ProductsController extends Controller
             $input['weight'] = $request->input('products_weight') ??  null;
             $input['volumetric_weight_kg'] = $request->input('volumetric_weight_kg') ??  null;
             $update_product_row->update($input);
+            $update_product_row->tags()->sync($request->tags ?? []);
             if ($request->hasFile('product_images')) {
                 $files = $request->file('product_images');                
                 foreach ($files as $key => $file) {
@@ -1880,5 +1876,21 @@ class ProductsController extends Controller
                 'message' => 'Error duplicating product: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    public function updateTags(Request $request, Product $product)
+    {
+        $validated = $request->validate([
+            'tags' => 'nullable|array',
+            'tags.*' => 'exists:tags,id',
+        ]);
+        $product->tags()->sync($validated['tags'] ?? []);
+        return response()->json([
+            'success' => true,
+            'message' => 'Tags updated successfully',
+            'data' => [
+                'tags' => $product->tags()->pluck('title')
+            ]
+        ]);
     }
 }    

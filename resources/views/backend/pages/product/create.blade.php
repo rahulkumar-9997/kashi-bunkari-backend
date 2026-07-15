@@ -85,7 +85,7 @@
                            
                         </div>
                         <div class="row">
-                           <div class="col-lg-6">
+                           <div class="col-lg-12">
                               <div class="mb-2">
                                  <label for="label" class="form-label">Label</label>
                                  <select class="form-control" id="label" data-choices data-choices-groups data-placeholder="Select a Label" name="label">
@@ -98,25 +98,6 @@
                                  </select>
                               </div>
                            </div>
-                           <div class="col-lg-6">
-                              <div class="mb-2">
-                                 <label for="product_tags" class="form-label">Tags</label>
-                                 <select class="product_tags js-example-basic-single" name="product_tags" id="product_tags">
-                                    <option value="">Choose a Tags</option>
-                                    <option value="New">New</option>
-                                    <option value="Digital">Digital</option>
-                                 </select>
-                              </div>
-                           </div>
-                           <!--<div class="col-lg-6">
-                              <div class="mb-2">
-                                 <label for="product_weight" class="form-label">Product Weight In Gram</label>
-                                 <div class="input-group mb-2">
-                                    <span class="input-group-text fs-20"><i class='bx bx-weight'></i></span>
-                                    <input type="number" id="product_weight" class="form-control" placeholder="000" name="product_weight">
-                                 </div>
-                              </div>
-                           </div>-->
                         </div>
                         <div class="row">
                            <div class="col-lg-12">
@@ -394,6 +375,34 @@
                   <!--seo meta-->
                </div>
                <div class="col-xl-5 col-lg-5">
+                  <!--Product Tags-->
+                  <div class="card">
+                     <div class="card-header">
+                        <h4 class="card-title">Product Tags</h4>
+                     </div>
+                     <div class="card-body">
+                        <div class="row">
+                              @foreach($tags as $tag)
+                                 <div class="col-md-12 mb-2">
+                                    <div class="form-check">
+                                          <input
+                                             class="form-check-input"
+                                             type="checkbox"
+                                             name="tags[]"
+                                             id="tag{{ $tag->id }}"
+                                             value="{{ $tag->id }}"
+                                             {{ in_array($tag->id, old('tags', [])) ? 'checked' : '' }}
+                                          >
+                                          <label class="form-check-label" for="tag{{ $tag->id }}">
+                                             {{ $tag->title }}
+                                          </label>
+                                    </div>
+                                 </div>
+                              @endforeach
+                        </div>
+                     </div>
+                  </div>
+                  <!--Product Tags-->
                   <div class="card">
                      <div class="card-header">
                         <h4 class="card-title">Product Dimensions</h4>

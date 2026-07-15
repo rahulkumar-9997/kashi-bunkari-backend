@@ -185,8 +185,82 @@ $(function () {
             }
         });
     });
-    /*Create Dublicate Product */
-
+    /*Create Dublicate Product */ 
+    function initProductListSelect2() { 
+        $('.tags-select').select2({
+            placeholder: "Add tags...",
+            allowClear: true,
+            width: '100%'
+        });
+    }
+ 
+    function showQuickFeedback($el, text, isError) {
+        const $badge = $('<span class="badge ms-1"></span>')
+            .addClass(isError ? 'bg-danger' : 'bg-success')
+            .text(text);
+        $el.closest('td').append($badge);
+        setTimeout(function () {
+            $badge.fadeOut(400, function () {
+                $(this).remove();
+            });
+        }, 1200);
+    }
+     $(document).on('change', '.tags-select', function () {
+        const $el = $(this);
+        const productId = $el.data('product-id');
+        const saveUrl = $el.data('save-url');
+        const selectedTags = $el.val() || []; 
+        if (!saveUrl) {
+            console.error('Missing data-save-url on tags-select for product', productId);
+            return;
+        } 
+        $el.prop('disabled', true); 
+        $.ajax({
+            url: saveUrl,
+            type: 'POST',
+            data: {
+                _token: $('meta[name="csrf-token"]').attr('content'),
+                tags: selectedTags
+            },
+            success: function (response) {
+                $el.prop('disabled', false);
+                if (response.success) {
+                    Toastify({
+                        text: response.message || 'Tags updated',
+                        duration: 4000,
+                        gravity: "top",
+                        position: "right",
+                        className: "bg-success",
+                        close: true
+                    }).showToast();
+                } else {
+                    Toastify({
+                        text: response.message || 'Failed to update tags',
+                        duration: 6000,
+                        gravity: "top",
+                        position: "right",
+                        className: "bg-danger",
+                        close: true
+                    }).showToast();
+                }
+            },
+            error: function (xhr) {
+                $el.prop('disabled', false);
+                const msg = xhr.responseJSON && xhr.responseJSON.message
+                    ? xhr.responseJSON.message
+                    : 'Something went wrong while saving tags.';
+                Toastify({
+                    text: msg,
+                    duration: 6000,
+                    gravity: "top",
+                    position: "right",
+                    className: "bg-danger",
+                    close: true
+                }).showToast();
+            }
+        });
+    }); 
+    /* ===================== End Product Tags ===================== */
     function updateFilters() {
         const categoryId = $('#category-filter').val();
         const search = $('#product-search').val();
@@ -219,6 +293,7 @@ $(function () {
                 $('#loader').hide();
                 bindCheckboxEventHandlers();
                 singleDeleteProduct();
+                initProductListSelect2();
             },
             error: function () {
                 alert("An error occurred while filtering products.");

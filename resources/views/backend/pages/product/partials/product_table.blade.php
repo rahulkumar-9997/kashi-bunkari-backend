@@ -6,11 +6,10 @@
                 <th>No.</th>
                 <th style="width: 20%;">Name</th>
                 <th style="width: 10%;">Image</th>
-                <!-- <th>HSN</th>
-                <th>GST%</th> -->
                 <th>Status</th>
                 <th>Category</th>
                 <th>Created Date</th>
+                <th style="width: 15%">Tags</th>
                 <th>Attributes</th>
                 <th>Action</th>
             </tr>
@@ -49,10 +48,16 @@
                         <!-- {{ $product->title }} -->
                     </td>
                     <td>
-                        @if($product->images->isNotEmpty())
-                            <img src="{{ asset('storage/images/product/thumb/' . $product->images[0]->image_path) }}" class="img-thumbnail" style="width: 70px; height: 70px;" alt="{{ $product->title }}">
+                        @php
+                            $imagePath = 'images/product/thumb/' . ($product->images[0]->image_path ?? '');
+                        @endphp
+                        @if($product->images->isNotEmpty() && Storage::disk('public')->exists($imagePath))
+                        <img src="{{ asset('storage/' . $imagePath) }}"
+                        class="img-thumbnail"
+                        style="width: 70px; height: 70px;"
+                        alt="{{ $product->title }}">
                         @else
-                            <span>No images.</span>
+                            <span>No image.</span>
                         @endif
                         <br>
                         <a href="javascript:void(0)" data-ajax-image-popup="true" data-size="lg" data-title="Upload Image ({{ $product->title }})" data-url="{{route('products.modal-image-form')}}" data-bs-toggle="tooltip" data-pid="{{$product->id}}" data-bs-original-title="Upload Image">
@@ -61,8 +66,6 @@
                             </span>
                         </a>
                     </td>
-                    <!-- <td>{{ $product->hsn_code }}</td>
-                    <td>{{ $product->gst_in_per }}</td> -->
                     <td>
                         <span class="badge {{ $product->product_status === 1 ? 'bg-success' : 'bg-danger' }}">
                             {{ $product->product_status === 1 ? 'Published' : 'Not Published' }}
@@ -71,6 +74,19 @@
                     <td>{{ $product->category->title ?? 'No Category' }}</td>
                     
                     <td><span class="text-success">{{ $product->created_at->toFormattedDateString() }}</span></td>
+                    <td>
+                        @if(!empty($data['tags']) && $data['tags']->count())
+                        <select class="tags-select"  multiple="multiple" data-product-id="{{ $product->id }}"
+                        data-save-url="{{ route('product.tags.update', $product->id) }}">
+                            @foreach($data['tags'] as $tag)
+                                <option value="{{ $tag->id }}" 
+                                    {{ $product->tags->contains($tag->id) ? 'selected' : '' }}>
+                                    {{ $tag->title }}
+                                </option>
+                            @endforeach
+                        </select>
+                        @endif
+                    </td>
                     <td>
                         <div class="overflow-auto" style="max-width: 200px; max-height: 80px; overflow: auto; white-space: nowrap;">
                             <table class="table table-striped table-centered">
@@ -88,20 +104,6 @@
                     </td>
                     <td>
                         <div class="d-flex gap-1">
-                            <button type="button" class="btn btn-soft-info btn-sm duplicate-product-btn d-flex align-item-center" 
-                                data-product-id="{{ $product->id }}"
-                                data-route="{{ route('product.make.duplicate', $product->id) }}"
-                                data-product-name="{{ $product->title }}"
-                                data-title="Create Duplicate Product"
-                                data-bs-toggle="tooltip"
-                                title="Create Duplicate Product">
-                                <i class="ti ti-copy"></i>
-                                @if($product->duplications_count > 0)
-                                    <span class="badge bg-danger ms-1" style="margin-bottom: 4px;">
-                                        {{ $product->duplications_count }}
-                                    </span>
-                                @endif
-                            </button>
                             <a href="{{ route('product.show', $product->id) }}" class="btn btn-soft-primary btn-sm"><i class="ti ti-eye"></i></a>
                             <a href="{{ route('product.edit', $product->id) }}" class="btn btn-soft-primary btn-sm"><i class="ti ti-pencil"></i></a>
                             <form method="POST" action="{{ route('product.destroy', $product->id) }}">

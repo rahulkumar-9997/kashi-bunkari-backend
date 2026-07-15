@@ -2,14 +2,11 @@
 @section('title','Manage Products')
 @section('main-content')
 @push('styles')
-<!-- <link href="{{asset('backend/assets/vendor/datatables/css/jquery.dataTables.css')}}" rel="stylesheet" type="text/css" media="screen"/>
-<link href="{{asset('backend/assets/vendor/datatables/extensions/TableTools/css/dataTables.tableTools.min.css')}}" rel="stylesheet" type="text/css" media="screen"/>
-<link href="{{asset('backend/assets/vendor/datatables/extensions/Responsive/css/dataTables.responsive.css')}}" rel="stylesheet" type="text/css" media="screen"/>
-<link href="{{asset('backend/assets/vendor/datatables/extensions/Responsive/bootstrap/3/dataTables.bootstrap.css')}}" rel="stylesheet" type="text/css" media="screen"/>    -->
 <link rel="stylesheet" type="text/css" href="{{asset('backend/assets/js/daterangepicker/daterangepicker.css')}}" />
-@endpush
-<!-- Start Container Fluid -->
 
+<link href="{{asset('backend/assets/plugins/select2/select2.css')}}" rel="stylesheet" type="text/css" media="screen" />
+<link href="{{asset('backend/assets/plugins/multi-select/css/multi-select.css')}}" rel="stylesheet" type="text/css" media="screen" />
+@endpush
 <div class="container-fluid">
    <div class="row">
       <div class="col-xl-12">
@@ -126,6 +123,9 @@
 <!-- modal--->
 @endsection
 @push('scripts')
+<script src="{{asset('backend/assets/plugins/select2/select2.min.js')}}" type="text/javascript"></script>
+<script src="{{asset('backend/assets/plugins/multi-select/js/jquery.multi-select.js')}}" type="text/javascript"></script>
+
 <script>
    var routes = {
       productIndex: "{{ route('product.index') }}",
