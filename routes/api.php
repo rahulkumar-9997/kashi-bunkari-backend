@@ -46,12 +46,12 @@ Route::post('/contact-submit', [ContactController::class, 'submit']);
 Route::prefix('customer')->group(function () {
     /* Public APIs */
     Route::controller(CustomerAuthController::class)->group(function () {        
-        Route::post('/login', 'loginOrCreateAccountWithOtp')->middleware('throttle:5,1');
-        Route::post('/send-otp', 'sendOtp')->middleware('throttle:5,1');
-        Route::post('/verify-otp', 'verifyOtpAndLogin')->middleware('throttle:10,1');
+        Route::post('/login', 'loginOrCreateAccountWithOtp');
+        Route::post('/send-otp', 'sendOtp');
+        Route::post('/verify-otp', 'verifyOtpAndLogin');
         Route::post('/resend-otp', 'resendOtp')->middleware('throttle:5,1');
-        Route::post('/check-contact', 'checkContactExists')->middleware('throttle:10,1');
-        Route::post('/google-login', 'googleLogin')->middleware('throttle:10,1');
+        Route::post('/check-contact', 'checkContactExists');
+        Route::post('/google-login', 'googleLogin');
     });
     /* Protected APIs */
     Route::middleware(['auth:sanctum'])->group(function () {

@@ -1353,14 +1353,14 @@ class ProductsController extends Controller
                         'product',
                         null
                     );
-                    $image_file_name_jpg = ImageHelper::uploadProductImageJpg(
+                    /*$image_file_name_jpg = ImageHelper::uploadProductImageJpg(
                         $file,
                         $baseName,
                         'thumb',
                         250, 
                         250, 
                         null,  
-                    ); 
+                    );*/
                     ProductImages::create([
                         'product_id' => $request->input('product_id'),
                         'image_path' => $image_file_name_webp,

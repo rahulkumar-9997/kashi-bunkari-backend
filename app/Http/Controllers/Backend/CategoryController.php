@@ -338,6 +338,7 @@ class CategoryController extends Controller
         DB::beginTransaction();
 
         try {
+            Cache::forget('mega_menu_data');
             $categoryId = $request->input('category_id');
             $selectedAttributes = $request->input('attributes', []); 
             MappedCategoryToAttributesForFront::where('category_id', $categoryId)
@@ -373,6 +374,7 @@ class CategoryController extends Controller
     {
         DB::beginTransaction();
         try {
+
             $category = Category::with([
                 'mapCategoryAttributes',
                 'subCategories',
@@ -386,6 +388,7 @@ class CategoryController extends Controller
                 'category',
             );
             $category->delete();
+            Cache::forget('mega_menu_data');
             DB::commit();
             return redirect('category')->with('success', 'Category and all related data deleted successfully');
         } catch (\Exception $e) {

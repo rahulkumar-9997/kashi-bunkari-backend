@@ -168,23 +168,24 @@ class CustomerAuthController extends Controller
                 'message' => 'Account is deactivated'
             ], 403);
         }
-
+		/*
         if (cache()->has('locked_' . $customer->id)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Too many attempts. Please try again in 15 minutes.'
             ], 429);
         }
+		*/
 
         $cachedOtp = cache()->get('otp_' . $customer->id);
 
         if (!$cachedOtp || $cachedOtp != $request->otp) {
             $customer->increment('login_attempts');
-
-            if ($customer->login_attempts >= 5) {
+            /*
+			if ($customer->login_attempts >= 5) {
                 cache()->put('locked_' . $customer->id, true, now()->addMinutes(15));
             }
-
+			*/
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid or expired OTP'

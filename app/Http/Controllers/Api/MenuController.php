@@ -71,6 +71,7 @@ class MenuController extends Controller
 
         return response()->json([
             'status' => true,
+            'message' => 'Menu fetched successfully',
             'data' => $categories
         ]);
     }
