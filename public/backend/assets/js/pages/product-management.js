@@ -291,6 +291,7 @@ $(function () {
             success: function (data) {
                 $('#product-list-container').html(data);
                 $('#loader').hide();
+                $('#product-list-container').css('visibility', 'visible');
                 bindCheckboxEventHandlers();
                 singleDeleteProduct();
                 initProductListSelect2();

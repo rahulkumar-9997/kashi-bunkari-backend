@@ -108,7 +108,7 @@
             <div class="card-body">
                @if (isset($data['product_list']) && $data['product_list']->count() > 0)
 
-               <div class="table-responsive" id="product-list-container">
+               <div class="table-responsive" id="product-list-container" style="visibility: hidden;">
                   @include('backend.pages.product.partials.product_table', ['data' => $data])
                </div>
                @endif
