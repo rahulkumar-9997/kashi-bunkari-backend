@@ -30,7 +30,7 @@ use App\Http\Controllers\Backend\RelatedProductController;
 use App\Http\Controllers\Backend\PrimaryCategoryController;
 use App\Http\Controllers\Backend\MagicAiImageGeneratorController;
 use App\Http\Controllers\Backend\TagController;
-Route::get('/', [LoginController::class, 'showLoginForm']);
+
 Route::prefix('admin')->group(function () {
     Route::get('/login', [LoginController::class, 'showLoginForm']);
     Route::post('/login', [LoginController::class, 'login'])->name('login');

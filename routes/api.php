@@ -34,6 +34,9 @@ Route::get('blog/{slug}', [BlogController::class, 'blogDetails']);
 Route::get('search-suggestion', [SearchController::class, 'searchSuggestions']);
 Route::get('search', [SearchController::class, 'searchProductList']);
 
+Route::get('shop/{first}/{second?}/{third?}', [ProductController::class, 'productCatalogForAllParams']);
+
+
 Route::get('product-catalog/{category}/{attribute}/{value}', [ProductController::class, 'productCatalog']);
 Route::get('category/{category}', [ProductController::class, 'productCategoryCatalog']);
 Route::get('products/{product_slug}/{attributes_value}', [ProductController::class, 'productDetails']);

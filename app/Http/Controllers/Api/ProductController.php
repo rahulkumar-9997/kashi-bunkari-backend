@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\Attribute_values;
@@ -13,11 +12,15 @@ use App\Models\RelatedProduct;
 use App\Models\ProductReview;
 use App\Models\ProductReviewFile;
 use App\Models\PrimaryCategory;
+use App\Models\Tag;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class ProductController extends Controller
 {
+   
     public function productCatalog(Request $request, $categorySlug, $valueSlug,  $attributeSlug)
     {
         try {
@@ -787,4 +790,419 @@ class ProductController extends Controller
             ], 500);
         }
     }
+
+    /**New implement */
+    public function productCatalogForAllParams(Request $request, $first, $second = null, $third = null)
+    {
+        try {
+            // Case: category + attribute + value
+            if ($second !== null && $third !== null) {
+                return $this->buildCategoryAttributeValueResponse($request, $first, $second, $third);
+            }
+    
+            // Case: only one slug given -> could be Tag or Category
+            if ($second === null && $third === null) {
+    
+                $tag = Tag::select('id', 'title', 'slug', 'meta_title', 'meta_description', 'content')
+                    ->where('slug', $first)
+                    ->where('status', true)
+                    ->first();
+                if ($tag) {
+                    return $this->buildTagResponse($request, $tag);
+                }
+    
+                $category = Category::select('id', 'title', 'slug')->where('slug', $first)->first();
+                if ($category) {
+                    return $this->buildCategoryResponse($request, $category);
+                }
+    
+                return response()->json(['success' => false, 'message' => 'Not found'], 404);
+            }
+    
+            // exactly 2 segments given -> not a valid combination in this app
+            return response()->json(['success' => false, 'message' => 'Invalid URL'], 404);
+    
+        } catch (\Exception $e) {
+            Log::error('Error in catalog: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+            return response()->json(['error' => $e->getMessage(), 'line' => $e->getLine()], 500);
+        }
+    }
+    
+    /*BRANCH 1: TAG   (e.g. new-arrival, trending) */
+    private function buildTagResponse(Request $request, Tag $tag)
+    {
+        $productsQuery = Product::where('product_status', 1)
+            ->whereHas('tags', function ($q) use ($tag) {
+                $q->where('tags.id', $tag->id);
+            });
+    
+        $this->applyDynamicFilters($request, $productsQuery);
+        $this->applySort($request, $productsQuery);
+    
+        $products = $this->getPaginatedProducts($productsQuery, 30);
+        $filters = $this->getTagFilterList($tag);
+    
+        $siteName = "Kasi Bunkari";
+        $title = !empty($tag->meta_title) ? $tag->meta_title : $tag->title . ' | ' . $siteName;
+        $description = !empty($tag->meta_description)
+            ? $tag->meta_description
+            : 'Explore our ' . $tag->title . ' collection at ' . $siteName . '.';
+    
+        return response()->json([
+            'success' => true,
+            'message' => 'Tag products retrieved successfully',
+            'data' => [
+                'type' => 'tag',
+                'meta' => [
+                    'title' => Str::limit($title, 60, ''),
+                    'description' => Str::limit($description, 160, ''),
+                    'keywords' => $siteName . ', ' . $tag->title
+                ],
+                'tag' => [
+                    'id' => $tag->id,
+                    'title' => $tag->title,
+                    'slug' => $tag->slug,
+                    'content' => $tag->content,
+                ],
+                'products' => $products->items(),
+                'pagination' => $this->buildPagination($products),
+                'product_filters' => $filters
+            ]
+        ]);
+    }
+    
+    /*  BRANCH 2: CATEGORY ONLY */
+    private function buildCategoryResponse(Request $request, Category $category)
+    {
+        $primary_category = PrimaryCategory::where('additional_slug', $category->slug)->first();
+    
+        $productsQuery = Product::where('category_id', $category->id)->where('product_status', 1);
+    
+        $this->applyDynamicFilters($request, $productsQuery);
+        $this->applySort($request, $productsQuery);
+    
+        $products = $this->getPaginatedProducts($productsQuery, 12);
+        $filters = $this->getCategoryFilterList($category, null, null, false);
+        $meta = $this->buildMeta($primary_category, $primary_category->title ?? $category->title, null);
+    
+        return response()->json([
+            'success' => true,
+            'message' => 'Category products retrieved successfully',
+            'data' => [
+                'type' => 'category',
+                'meta' => $meta,
+                'primary_category' => $this->buildPrimaryCategoryData($primary_category),
+                'category' => $category,
+                'products' => $products->items(),
+                'pagination' => $this->buildPagination($products),
+                'product_filters' => $filters
+            ]
+        ]);
+    }
+    
+    /*  BRANCH 3: CATEGORY + ATTRIBUTE + VALUE */
+    private function buildCategoryAttributeValueResponse(Request $request, $categorySlug, $attributeSlug, $valueSlug)
+    {
+        $additional_slug = $categorySlug . '-' . $valueSlug . '-' . $attributeSlug;
+        $primary_category = PrimaryCategory::where('additional_slug', $additional_slug)->first();
+    
+        $category = Category::select('id', 'title', 'slug')->where('slug', $categorySlug)->first();
+        if (!$category) {
+            return response()->json(['success' => false, 'message' => 'Category not found'], 404);
+        }
+    
+        $attribute_top = Attribute::select('id', 'title', 'slug')->where('slug', $attributeSlug)->first();
+        if (!$attribute_top) {
+            return response()->json(['success' => false, 'message' => 'Attribute not found'], 404);
+        }
+    
+        $attributeValue = Attribute_values::select('id', 'name', 'slug')->where('slug', $valueSlug)->first();
+        if (!$attributeValue) {
+            return response()->json(['success' => false, 'message' => 'Attribute value not found'], 404);
+        }
+    
+        $productsQuery = Product::where('category_id', $category->id)->where('product_status', 1);
+    
+        $productsQuery->whereHas('productAttributesValues.attributeValue', function ($q) use ($attribute_top, $attributeValue) {
+            $q->where('slug', $attributeValue->slug)
+                ->whereHas('attribute', function ($q2) use ($attribute_top) {
+                    $q2->where('slug', $attribute_top->slug);
+                });
+        });
+    
+        $this->applyDynamicFilters($request, $productsQuery, $attribute_top->slug);
+        $this->applySort($request, $productsQuery);
+    
+        $products = $this->getPaginatedProducts($productsQuery, 30);
+        $filters = $this->getCategoryFilterList($category, $attribute_top, $attributeValue, true);
+        $meta = $this->buildMeta($primary_category, $primary_category->title ?? $category->title, $attributeValue->name);
+    
+        return response()->json([
+            'success' => true,
+            'message' => 'Products retrieved successfully',
+            'data' => [
+                'type' => 'category_attribute_value',
+                'meta' => $meta,
+                'primary_category' => $this->buildPrimaryCategoryData($primary_category),
+                'category' => $category,
+                'attribute' => $attribute_top,
+                'attribute_value' => $attributeValue,
+                'products' => $products->items(),
+                'pagination' => $this->buildPagination($products),
+                'product_filters' => $filters
+            ]
+        ]);
+    }
+    
+    /* SHARED HELPERS (used by all 3 branches) */
+    
+    private function applyDynamicFilters(Request $request, $productsQuery, $excludeAttributeSlug = null)
+    {
+        if (!$request->has('filter')) {
+            return;
+        }
+        $filters = $request->except(['filter', 'sort', 'page']);
+        foreach ($filters as $filterAttrSlug => $valueSlugs) {
+            if ($excludeAttributeSlug && $filterAttrSlug === $excludeAttributeSlug) {
+                continue;
+            }
+            if (is_string($valueSlugs)) {
+                $valueSlugs = explode(',', $valueSlugs);
+            }
+            foreach ($valueSlugs as $singleSlug) {
+                $productsQuery->whereHas('productAttributesValues', function ($q) use ($filterAttrSlug, $singleSlug) {
+                    $q->whereHas('attributeValue', function ($q2) use ($filterAttrSlug, $singleSlug) {
+                        $q2->where('slug', $singleSlug)
+                            ->whereHas('attribute', function ($q3) use ($filterAttrSlug) {
+                                $q3->where('slug', $filterAttrSlug);
+                            });
+                    });
+                });
+            }
+        }
+    }
+    
+    private function applySort(Request $request, $productsQuery)
+    {
+        $sortOption = $request->get('sort');
+        switch ($sortOption) {
+            case 'new-arrivals':
+                $productsQuery->orderBy('created_at', 'desc');
+                break;
+            case 'price-low-to-high':
+                $productsQuery->orderByRaw('ISNULL(inventories.offer_rate), inventories.offer_rate ASC');
+                break;
+            case 'price-high-to-low':
+                $productsQuery->orderByRaw('ISNULL(inventories.offer_rate), inventories.offer_rate DESC');
+                break;
+            case 'a-to-z-order':
+                $productsQuery->orderBy('products.title', 'asc');
+                break;
+            default:
+                $productsQuery->orderBy('products.created_at', 'desc');
+                break;
+        }
+    }
+    
+    private function getPaginatedProducts($productsQuery, $perPage)
+    {
+        return $productsQuery->with([
+                'category:id,title,slug',
+                'images' => function ($query) {
+                    $query->select('id', 'product_id', 'image_path', 'sort_order')->orderBy('sort_order');
+                },
+                'productAttributesValues' => function ($query) {
+                    $query->select('id', 'product_id', 'product_attribute_id', 'attributes_value_id')
+                        ->with(['attributeValue:id,slug', 'productAttribute:id,attributes_id'])
+                        ->orderBy('id');
+                },
+            ])
+            ->leftJoin('inventories', function ($join) {
+                $join->on('products.id', '=', 'inventories.product_id')
+                    ->whereRaw('inventories.mrp = (SELECT MIN(mrp) FROM inventories WHERE product_id = products.id)');
+            })
+            ->select(
+                'products.id', 'products.title', 'products.slug', 'products.category_id', 'products.created_at',
+                'inventories.mrp', 'inventories.offer_rate', 'inventories.purchase_rate',
+                'inventories.sku', 'inventories.stock_quantity'
+            )
+            ->paginate($perPage)
+            ->through(function ($product) {
+                $attributes_value = null;
+                if ($product->productAttributesValues->isNotEmpty()) {
+                    $attributes_value = optional($product->productAttributesValues->first()->attributeValue)->slug;
+                }
+                return [
+                    'id' => $product->id,
+                    'title' => $product->title,
+                    'slug' => $product->slug,
+                    'mrp' => $product->mrp,
+                    'offer_price' => $product->offer_rate,
+                    'sku' => $product->sku,
+                    'stock_quantity' => $product->stock_quantity,
+                    'image' => isset($product->images[0])
+                        ? asset('storage/images/product/small/' . $product->images[0]->image_path)
+                        : null,
+                    'attributes_value_slug' => $attributes_value
+                ];
+            });
+    }
+    
+    private function buildPagination($products)
+    {
+        return [
+            'current_page' => $products->currentPage(),
+            'total_pages' => $products->lastPage(),
+            'per_page' => $products->perPage(),
+            'total_products' => $products->total(),
+            'next_page_url' => $products->nextPageUrl(),
+            'previous_page_url' => $products->previousPageUrl(),
+            'has_next_page' => $products->hasMorePages(),
+            'has_previous_page' => $products->currentPage() > 1
+        ];
+    }
+    
+    private function buildPrimaryCategoryData($primary_category)
+    {
+        return [
+            'title' => $primary_category ? $primary_category->title : null,
+            'short_content' => $primary_category ? $primary_category->short_heading : null,
+            'long_content' => $primary_category ? $primary_category->primary_category_description : null,
+        ];
+    }
+    
+    private function buildMeta($primary_category, $categoryTitle, $attributeName = null)
+    {
+        $siteName = "Kasi Bunkari";
+        $shortHeading = $primary_category->short_heading ?? null;
+    
+        if ($attributeName) {
+            $fallbackTitle = $attributeName . ' ' . $categoryTitle . ' | ' . $siteName;
+            $fallbackDescription = 'Buy ' . $attributeName . ' ' . $categoryTitle . ' from ' . $siteName
+                . '. Explore premium quality ' . $categoryTitle . ' crafted with the best ' . $attributeName . '.';
+            $keywords = $siteName . ', ' . $categoryTitle . ', ' . $attributeName . ' ' . $categoryTitle;
+        } else {
+            $fallbackTitle = $categoryTitle . ' | ' . $siteName;
+            $fallbackDescription = $shortHeading
+                ? $shortHeading . ' - Explore and buy ' . $categoryTitle . ' at best prices from ' . $siteName
+                : 'Explore and buy ' . $categoryTitle . ' at best prices from ' . $siteName . '. High quality products with fast delivery.';
+            $keywords = $siteName . ', ' . $categoryTitle;
+        }
+    
+        $title = $primary_category && !empty($primary_category->meta_title) ? $primary_category->meta_title : $fallbackTitle;
+        $description = $primary_category && !empty($primary_category->meta_description) ? $primary_category->meta_description : $fallbackDescription;
+    
+        return [
+            'title' => Str::limit($title, 60, ''),
+            'description' => Str::limit($description, 160, ''),
+            'keywords' => $keywords
+        ];
+    }
+    
+    private function getCategoryFilterList($category, $attribute_top, $attributeValue, $isFiltered)
+    {
+        $query = $category->attributes()->select('attributes.id', 'attributes.title', 'attributes.slug');
+    
+        if ($isFiltered) {
+            $query->whereHas('AttributesValues', function ($q) use ($category, $attribute_top, $attributeValue) {
+                $q->whereHas('map_attributes_value_to_categories', function ($q2) use ($category) {
+                        $q2->where('category_id', $category->id);
+                    })
+                    ->whereHas('productAttributesValues', function ($q2) use ($category, $attribute_top, $attributeValue) {
+                        $q2->whereHas('product', function ($q3) use ($category, $attribute_top, $attributeValue) {
+                            $q3->where('category_id', $category->id)
+                                ->whereHas('productAttributesValues.attributeValue', function ($q4) use ($attribute_top, $attributeValue) {
+                                    $q4->where('slug', $attributeValue->slug)
+                                        ->whereHas('attribute', function ($q5) use ($attribute_top) {
+                                            $q5->where('slug', $attribute_top->slug);
+                                        });
+                                });
+                        });
+                    });
+            });
+        }
+    
+        $query->with(['AttributesValues' => function ($query) use ($category, $isFiltered, $attribute_top, $attributeValue) {
+            $query->select('id', 'attributes_id', 'name', 'slug')
+                ->whereHas('map_attributes_value_to_categories', function ($q) use ($category) {
+                    $q->where('category_id', $category->id);
+                })
+                ->withCount(['productAttributesValues' => function ($q) use ($category, $isFiltered, $attribute_top, $attributeValue) {
+                    $q->whereHas('product', function ($q2) use ($category, $isFiltered, $attribute_top, $attributeValue) {
+                        $q2->where('category_id', $category->id);
+                        if ($isFiltered) {
+                            $q2->whereHas('productAttributesValues.attributeValue', function ($q3) use ($attribute_top, $attributeValue) {
+                                $q3->where('slug', $attributeValue->slug)
+                                    ->whereHas('attribute', function ($q4) use ($attribute_top) {
+                                        $q4->where('slug', $attribute_top->slug);
+                                    });
+                            });
+                        }
+                    });
+                }])
+                ->when($isFiltered, function ($q) {
+                    $q->having('product_attributes_values_count', '>', 0);
+                })
+                ->orderBy('name');
+        }])
+        ->orderBy('title');
+    
+        return $query->get()
+            ->when($isFiltered, function ($collection) {
+                return $collection->filter(fn($attribute) => $attribute->AttributesValues->isNotEmpty());
+            })
+            ->map(function ($attribute) {
+                return [
+                    'id' => $attribute->id,
+                    'title' => $attribute->title,
+                    'slug' => $attribute->slug,
+                    'values' => $attribute->AttributesValues->map(fn($value) => [
+                        'id' => $value->id,
+                        'name' => $value->name,
+                        'slug' => $value->slug
+                    ])
+                ];
+            })
+            ->values();
+    }
+    
+    private function getTagFilterList(Tag $tag)
+    {
+        return Attribute::select('id', 'title', 'slug')
+            ->whereHas('AttributesValues.productAttributesValues.product', function ($q) use ($tag) {
+                $q->where('product_status', 1)
+                ->whereHas('tags', function ($q2) use ($tag) {
+                    $q2->where('tags.id', $tag->id);
+                });
+            })
+            ->with(['AttributesValues' => function ($query) use ($tag) {
+                $query->select('id', 'attributes_id', 'name', 'slug')
+                    ->withCount(['productAttributesValues' => function ($q) use ($tag) {
+                        $q->whereHas('product', function ($q2) use ($tag) {
+                            $q2->where('product_status', 1)
+                            ->whereHas('tags', function ($q3) use ($tag) {
+                                $q3->where('tags.id', $tag->id);
+                            });
+                        });
+                    }])
+                    ->having('product_attributes_values_count', '>', 0)
+                    ->orderBy('name');
+            }])
+            ->orderBy('title')
+            ->get()
+            ->filter(fn($attribute) => $attribute->AttributesValues->isNotEmpty())
+            ->map(fn($attribute) => [
+                'id' => $attribute->id,
+                'title' => $attribute->title,
+                'slug' => $attribute->slug,
+                'values' => $attribute->AttributesValues->map(fn($value) => [
+                    'id' => $value->id,
+                    'name' => $value->name,
+                    'slug' => $value->slug
+                ])
+            ])
+            ->values();
+    }
+    /**New implement */
 }

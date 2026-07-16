@@ -6,12 +6,34 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use App\Models\Category;
+use App\Models\Tag;
 
 class MenuController extends Controller
 {
     public function menu()
     {
-        $categories = Cache::remember('mega_menu_data', now()->addHours(24), function () {
+		$tags = Tag::select('id', 'title', 'slug', 'image')
+		->where('status', 1)
+		->whereIn('title', [
+			'Casual',
+			'Office',
+			'Party',
+			'Festival',
+			'Wedding'
+		])
+		->orderBy('title')
+		->get()
+		->map(function ($tag) {
+			return [
+				'title' => $tag->title,
+				'slug' => $tag->slug,
+				'image' => $tag->image
+					? asset('storage/images/tags/' . $tag->image)
+					: null,
+			];
+		});
+		
+		$categories = Cache::remember('mega_menu_data', now()->addHours(24), function () {
             return Category::query()
                 ->with([
                     'attributes' => function ($query) {
@@ -72,8 +94,16 @@ class MenuController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Menu fetched successfully',
-            'data' => $categories
+            'data' => [
+				'categories' => $categories,
+				'sections' => [
+					[
+						'title' => 'Shop By Occasion',
+						'slug'  => 'shop-by-occasion',
+						'items' => $tags,
+					]
+				]
+			]
         ]);
     }
-    
 }
