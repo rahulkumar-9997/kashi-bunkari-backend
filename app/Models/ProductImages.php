@@ -28,4 +28,8 @@ class ProductImages extends Model
     {
         return asset('storage/images/product/small/'.$this->image_path);
     }
+	public function getLargeImages()
+    {
+        return asset('storage/images/product/large/'.$this->image_path);
+    }
 }

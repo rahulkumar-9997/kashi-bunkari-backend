@@ -1904,6 +1904,13 @@ class ProductsController extends Controller
             $product = Product::findOrFail($id);
             $product->product_status = $request->product_status;
             $product->save();
+			Cache::forget('home_new_arrivals_tag');
+			Cache::forget('home_new_arrivals_products');
+			
+			Cache::forget('home_popular_products_tag');
+			Cache::forget('home_popular_products');
+			
+			
             return response()->json([
                 'success' => true,
                 'message' => 'Product status updated successfully',

@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use App\Models\Category;
 use App\Models\Tag;
+use App\Models\Label;
+
 
 class MenuController extends Controller
 {
@@ -26,10 +28,21 @@ class MenuController extends Controller
 		->map(function ($tag) {
 			return [
 				'title' => $tag->title,
-				'slug' => $tag->slug,
-				'image' => $tag->image
-					? asset('storage/images/tags/' . $tag->image)
-					: null,
+				'slug' => $tag->slug,				
+			];
+		});
+		/*Shop collection menu*/
+		$labels = Label::where('status', 1)
+		->whereHas('firstProduct', function ($query) {
+			$query->where('product_status', 1);
+		})
+		->select('id', 'title', 'slug')
+		->take(10)
+		->get()
+		->map(function ($label) {
+			return [
+				'title' => $label->title,
+				'slug' => $label->slug,
 			];
 		});
 		
@@ -101,6 +114,11 @@ class MenuController extends Controller
 						'title' => 'Shop By Occasion',
 						'slug'  => 'shop-by-occasion',
 						'items' => $tags,
+					],
+					[
+						'title' => 'Shop By Collection',
+						'slug'  => 'shop-by-collection',
+						'items' => $labels,
 					]
 				]
 			]

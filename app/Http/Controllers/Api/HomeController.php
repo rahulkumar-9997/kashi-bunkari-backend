@@ -139,7 +139,7 @@ class HomeController extends Controller
 						*/
 					];
 				})
-				 ->shuffle()
+				->shuffle()
 				->take(8)
 				->values();
 		});
