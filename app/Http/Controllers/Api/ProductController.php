@@ -9,10 +9,9 @@ use App\Models\Product;
 use App\Models\Attribute_values;
 use App\Models\Attribute;
 use App\Models\RelatedProduct;
-use App\Models\ProductReview;
-use App\Models\ProductReviewFile;
 use App\Models\PrimaryCategory;
 use App\Models\Tag;
+use App\Models\Label;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -796,12 +795,12 @@ class ProductController extends Controller
     public function productCatalogForAllParams(Request $request, $first, $second = null, $third = null)
     {
         try {
-            // category + attribute + value
+            /* category + attribute + value */
             if ($second !== null && $third !== null) {
                 return $this->buildCategoryAttributeValueResponse($request, $first, $second, $third);
             }
 
-            // Case: only one slug given -> could be Tag or Category
+            /* Case: only one slug given -> could be Tag, Category, or Label */
             if ($second === null && $third === null) {
 
                 $tag = Tag::select('id', 'title', 'slug', 'meta_title', 'meta_description', 'content')
@@ -817,7 +816,15 @@ class ProductController extends Controller
                     return $this->buildCategoryResponse($request, $category);
                 }
 
-                return $this->notFoundResponse('No category or tag found for "' . $first . '".');
+                $label = Label::select('id', 'title', 'slug')
+                    ->where('slug', $first)
+                    ->where('status', 1)
+                    ->first();
+                if ($label) {
+                    return $this->buildLabelResponse($request, $label);
+                }
+
+                return $this->notFoundResponse('No category, tag, or label found for "' . $first . '".');
             }
             return $this->invalidRequestResponse('This URL format is not supported. Expected /shop/{slug} or /shop/{category}/{attribute}/{value}.');
 
@@ -951,8 +958,45 @@ class ProductController extends Controller
         ]);
     }
 
-    /* SHARED HELPERS (used by all 3 branches) */
+    /*  BRANCH 4: LABEL   (e.g. new-arrivals label, best-seller label) */
+    private function buildLabelResponse(Request $request, Label $label)
+    {
+        $productsQuery = Product::where('product_status', 1)
+            ->where('label_id', $label->id);
 
+        $this->applyDynamicFilters($request, $productsQuery);
+        $this->applySort($request, $productsQuery);
+
+        $products = $this->getPaginatedProducts($productsQuery, 30);
+        $filters = $this->getLabelFilterList($label);
+
+        $siteName = "Kasi Bunkari";
+        $title = $label->title;
+        $description = 'Explore our ' . $label->title . ' collection at ' . $siteName . '.';
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Label products retrieved successfully',
+            'data' => [
+                'type' => 'label',
+                'meta' => [
+                    'title' => Str::limit($title, 60, ''),
+                    'description' => Str::limit($description, 160, ''),
+                    'keywords' => $siteName . ', ' . $label->title
+                ],
+                'label' => [
+                    'id' => $label->id,
+                    'title' => $label->title,
+                    'slug' => $label->slug,
+                ],
+                'products' => $products->items(),
+                'pagination' => $this->buildPagination($products),
+                'product_filters' => $filters
+            ]
+        ]);
+    }
+
+    /* SHARED HELPERS (used by all 4 branches) */
     private function applyDynamicFilters(Request $request, $productsQuery, $excludeAttributeSlug = null)
     {
         if (!$request->has('filter')) {
@@ -1090,9 +1134,6 @@ class ProductController extends Controller
                 : 'Explore and buy ' . $categoryTitle . ' at best prices from ' . $siteName . '. High quality products with fast delivery.';
             $keywords = $siteName . ', ' . $categoryTitle;
         }
-
-        // meta_title (if set in admin) is used as-is; only the auto-generated
-        // fallback title has the site name stripped out.
         $title = $primary_category && !empty($primary_category->meta_title) ? $primary_category->meta_title : $fallbackTitle;
         $description = $primary_category && !empty($primary_category->meta_description) ? $primary_category->meta_description : $fallbackDescription;
 
@@ -1208,9 +1249,40 @@ class ProductController extends Controller
             ->values();
     }
 
-    /* =========================================================================
-     |  STANDARDIZED ERROR RESPONSES
-     * ========================================================================= */
+    
+    private function getLabelFilterList(Label $label)
+    {
+        return Attribute::select('id', 'title', 'slug')
+            ->whereHas('AttributesValues.productAttributesValues.product', function ($q) use ($label) {
+                $q->where('product_status', 1)
+                  ->where('label_id', $label->id);
+            })
+            ->with(['AttributesValues' => function ($query) use ($label) {
+                $query->select('id', 'attributes_id', 'name', 'slug')
+                    ->withCount(['productAttributesValues' => function ($q) use ($label) {
+                        $q->whereHas('product', function ($q2) use ($label) {
+                            $q2->where('product_status', 1)
+                               ->where('label_id', $label->id);
+                        });
+                    }])
+                    ->having('product_attributes_values_count', '>', 0)
+                    ->orderBy('name');
+            }])
+            ->orderBy('title')
+            ->get()
+            ->filter(fn($attribute) => $attribute->AttributesValues->isNotEmpty())
+            ->map(fn($attribute) => [
+                'id' => $attribute->id,
+                'title' => $attribute->title,
+                'slug' => $attribute->slug,
+                'values' => $attribute->AttributesValues->map(fn($value) => [
+                    'id' => $value->id,
+                    'name' => $value->name,
+                    'slug' => $value->slug
+                ])
+            ])
+            ->values();
+    }
 
     private function notFoundResponse(string $message)
     {
@@ -1230,13 +1302,6 @@ class ProductController extends Controller
         ], 400);
     }
 
-    /**
-     * Logs the full exception server-side (for debugging) but sends only a
-     * safe, generic message to the client — never the raw exception message,
-     * file path, or line number, since that leaks internal implementation
-     * details. When app.debug is true (local dev), the real message is
-     * included to make debugging easier.
-     */
     private function serverErrorResponse(\Throwable $e, string $userMessage)
     {
         Log::error($userMessage . ' | ' . $e->getMessage(), [
