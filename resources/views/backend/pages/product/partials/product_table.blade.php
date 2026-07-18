@@ -67,9 +67,16 @@
                         </a>
                     </td>
                     <td>
-                        <span class="badge {{ $product->product_status === 1 ? 'bg-success' : 'bg-danger' }}">
-                            {{ $product->product_status === 1 ? 'Published' : 'Not Published' }}
-                        </span>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="form-check form-switch">
+                                <input
+                                class="form-check-input productStatusSwitch"
+                                type="checkbox"
+                                data-pid="{{ $product->id }}"
+                                data-url="{{ route('products.status', $product->id) }}"
+                                {{ $product->product_status == 1 ? 'checked' : '' }}>
+                            </div>
+                        </div>
                     </td>
                     <td>{{ $product->category->title ?? 'No Category' }}</td>
                     

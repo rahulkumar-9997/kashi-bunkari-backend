@@ -135,7 +135,8 @@ Route::group(['middleware' => ['auth:web']], function() {
     /**Attributes */
     /**Product route */
     Route::get('autocomplete/products', [ProductsController::class, 'autocompleteProductsAll'])->name('autocomplete.products');
-    Route::resource('product', ProductsController::class);    
+    Route::resource('product', ProductsController::class);
+    Route::post('products/{id}/status', [ProductsController::class, 'changeProductStatus'])->name('products.status');    
     Route::post('/products/bulk-delete', [ProductsController::class, 'bulkDelete'])->name('product.bulkDelete');
     Route::post('/products/modal-image-form', [ProductsController::class, 'imageUploadModalForm'])->name('products.modal-image-form');
     Route::post('/products/modal-image-form/submit', [ProductsController::class, 'imageUploadModalFormSubmit'])->name('products.modal-image-form.submit');    

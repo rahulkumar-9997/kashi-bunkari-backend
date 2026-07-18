@@ -31,6 +31,7 @@ use Carbon\Carbon;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\File;
 
+
 class ProductsController extends Controller
 {
     public function index(Request $request){ 
@@ -1892,5 +1893,50 @@ class ProductsController extends Controller
                 'tags' => $product->tags()->pluck('title')
             ]
         ]);
+    }
+
+    public function changeProductStatus(Request $request, $id)
+    {
+        try {
+            $request->validate([
+                'product_status' => 'required|boolean'
+            ]);
+            $product = Product::findOrFail($id);
+            $product->product_status = $request->product_status;
+            $product->save();
+            return response()->json([
+                'success' => true,
+                'message' => 'Product status updated successfully',
+                'data' => [
+                    'product_id' => $product->id,
+                    'product_status' => $product->product_status,
+                    'status_label' => $product->product_status ? 'Active' : 'Inactive'
+                ]
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            Log::error('Product not found for status update', ['product_id' => $id]);            
+            return response()->json([
+                'success' => false,
+                'message' => 'Product not found'
+            ], 404);
+            
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+            
+        } catch (\Exception $e) {
+            Log::error('Error updating product status', [
+                'product_id' => $id,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while updating the product status'
+            ], 500);
+        }
     }
 }    

@@ -123,8 +123,8 @@
 <!-- modal--->
 @endsection
 @push('scripts')
-<script src="{{asset('backend/assets/plugins/select2/select2.min.js')}}" type="text/javascript"></script>
-<script src="{{asset('backend/assets/plugins/multi-select/js/jquery.multi-select.js')}}" type="text/javascript"></script>
+<script src="{{asset('backend/assets/plugins/select2/select2.min.js')}}?v={{ env('ASSET_VERSION', '1.0') }}" type="text/javascript"></script>
+<script src="{{asset('backend/assets/plugins/multi-select/js/jquery.multi-select.js')}}?v={{ env('ASSET_VERSION', '1.0') }}" type="text/javascript"></script>
 
 <script>
    var routes = {
@@ -134,10 +134,10 @@
    };
    var csrfToken = "{{ csrf_token() }}";
 </script>
-<script type="text/javascript" src="{{asset('backend/assets/js/daterangepicker/daterangepicker.min.js')}}"></script>
-<script type="text/javascript" src="{{asset('backend/assets/js/pages/upload-image-file.js')}}"></script>
+<script type="text/javascript" src="{{asset('backend/assets/js/daterangepicker/daterangepicker.min.js')}}?v={{ env('ASSET_VERSION', '1.0') }}"></script>
+<script type="text/javascript" src="{{asset('backend/assets/js/pages/upload-image-file.js')}}?v={{ env('ASSET_VERSION', '1.0') }}"></script>
 
 <script src="{{asset('backend/assets/js/rahul-jquery-ui.min.js')}}"></script>
-<script type="text/javascript" src="{{asset('backend/assets/js/pages/product-management.js')}}"></script>
+<script type="text/javascript" src="{{asset('backend/assets/js/pages/product-management.js')}}?v={{ env('ASSET_VERSION', '1.0') }}"></script>
 
 @endpush

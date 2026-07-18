@@ -61,8 +61,79 @@ $(function () {
             complete: function () {
                 $submitButton.prop('disabled', false).html('Save changes');
             },
+        });        
+    });
+    /**Update product status */
+    $(document).on('change', '.productStatusSwitch', function() {
+        const $checkbox = $(this);
+        const productId = $checkbox.data('pid');
+        const url = $checkbox.data('url');
+        const isChecked = $checkbox.prop('checked') ? 1 : 0;
+        const originalState = $checkbox.prop('checked');
+        $checkbox.prop('disabled', true);
+        const $label = $checkbox.closest('.form-check').find('.form-check-label');
+        if ($label.length) {
+            $label.text('Updating...');
+        }            
+        $.ajax({
+            url: url,
+            type: 'POST',
+            data: {
+                _token: $('meta[name="csrf-token"]').attr('content'),
+                product_status: isChecked
+            },
+            success: function(response) {
+                if (response.success) {
+                    Toastify({
+                        text: response.message || 'Product status updated successfully',
+                        duration: 4000,
+                        gravity: "top",
+                        position: "right",
+                        className: "bg-success",
+                        close: true
+                    }).showToast();
+                    $checkbox.prop('checked', isChecked === 1);
+                    updateProductStatusUI(productId, isChecked);
+                    
+                } else {
+                    $checkbox.prop('checked', originalState);                        
+                    Toastify({
+                        text: response.message || 'Failed to update product status',
+                        duration: 5000,
+                        gravity: "top",
+                        position: "right",
+                        className: "bg-danger",
+                        close: true
+                    }).showToast();
+                }
+            },
+            error: function(xhr) {
+                $checkbox.prop('checked', originalState);                    
+                let errorMessage = 'Failed to update product status';
+                if (xhr.status === 422) {
+                    const errors = xhr.responseJSON.errors;
+                    errorMessage = Object.values(errors).flat().join('\n');
+                } else if (xhr.responseJSON && xhr.responseJSON.message) {
+                    errorMessage = xhr.responseJSON.message;
+                }                    
+                Toastify({
+                    text: errorMessage,
+                    duration: 5000,
+                    gravity: "top",
+                    position: "right",
+                    className: "bg-danger",
+                    close: true
+                }).showToast();
+            },
+            complete: function() {
+                $checkbox.prop('disabled', false);
+                if ($label.length) {
+                    $label.text('');
+                }
+            }
         });
     });
+    /**Update product status */
     /*Image modal form submit ajax */
     $('#daterange').daterangepicker({
         opens: 'right',
@@ -205,7 +276,7 @@ $(function () {
             });
         }, 1200);
     }
-     $(document).on('change', '.tags-select', function () {
+    $(document).on('change', '.tags-select', function () {
         const $el = $(this);
         const productId = $el.data('product-id');
         const saveUrl = $el.data('save-url');
@@ -260,6 +331,19 @@ $(function () {
             }
         });
     }); 
+
+    function updateProductStatusUI(productId, status) {
+        const $row = $(`.productStatusSwitch[data-pid="${productId}"]`).closest('.product-row');
+        const $statusBadge = $row.find('.product-status-badge');        
+        if ($statusBadge.length) {
+            if (status === 1) {
+                $statusBadge.removeClass('bg-danger').addClass('bg-success').text('Active');
+            } else {
+                $statusBadge.removeClass('bg-success').addClass('bg-danger').text('Inactive');
+            }
+        }
+    }
+
     /* ===================== End Product Tags ===================== */
     function updateFilters() {
         const categoryId = $('#category-filter').val();
