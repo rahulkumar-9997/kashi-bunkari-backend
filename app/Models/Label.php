@@ -16,6 +16,18 @@ class Label extends Model
         'status',
     ];
 
+    public function products()
+    {
+        return $this->hasMany(Product::class, 'label_id', 'id');
+    }
+
+    public function firstProduct()
+    {
+        return $this->hasOne(Product::class, 'label_id', 'id')
+        ->where('product_status', 1)
+        ->oldest('id');
+    }
+
     protected static function boot()
     {
         parent::boot();

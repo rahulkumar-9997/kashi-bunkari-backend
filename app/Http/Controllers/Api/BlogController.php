@@ -187,7 +187,7 @@ class BlogController extends Controller
                                 ? Str::limit(strip_tags($item->content), 100)
                                 : null),
                     'reading_title' => $item->reading_title,
-					'view_count' => $blog->view_count,
+					'view_count' => $item->view_count,
                     'tag' => $item->tags
                         ? trim(explode(',', $item->tags)[0])
                         : null,

@@ -21,9 +21,10 @@ Route::get('/user', function (Request $request) {
 Route::get('menu', [MenuController::class, 'menu']);
 Route::get('/home/banner', [HomeController::class, 'banner']);
 Route::get('/home/category', [HomeController::class, 'homeCategoryProducts']);
-
+Route::get('/home/collections', [HomeController::class, 'homeCollectionProducts']);
 Route::get('/home/new-arrivals', [HomeController::class, 'newArrivals']);
-Route::get('/home/trending-products', [HomeController::class, 'trendingProducts']);
+Route::get('/home/popular-products', [HomeController::class, 'popularProducts']);
+Route::get('/home/occasion', [HomeController::class, 'occasionProducts']);
 Route::get('/home/client', [HomeController::class, 'client']);
 Route::get('testimonials', [HomeController::class, 'testimonials']);
 Route::get('faq', [HomeController::class, 'faq']);
@@ -35,6 +36,7 @@ Route::get('search-suggestion', [SearchController::class, 'searchSuggestions']);
 Route::get('search', [SearchController::class, 'searchProductList']);
 
 Route::get('shop/{first}/{second?}/{third?}', [ProductController::class, 'productCatalogForAllParams']);
+Route::get('products/{product_slug}/{attributes_value}', [ProductController::class, 'productDetails']);
 
 
 Route::get('product-catalog/{category}/{attribute}/{value}', [ProductController::class, 'productCatalog']);

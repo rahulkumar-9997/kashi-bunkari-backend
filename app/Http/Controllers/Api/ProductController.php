@@ -21,7 +21,7 @@ use Illuminate\Support\Str;
 class ProductController extends Controller
 {
    
-    public function productCatalog(Request $request, $categorySlug, $valueSlug,  $attributeSlug)
+    public function productCatalog_remove(Request $request, $categorySlug, $valueSlug,  $attributeSlug)
     {
         try {
             $additional_slug = $categorySlug . '-' . $valueSlug . '-' . $attributeSlug;
@@ -318,7 +318,7 @@ class ProductController extends Controller
         }
     }
 
-    public function productCategoryCatalog(Request $request, $categorySlug)
+    public function productCategoryCatalog_remove(Request $request, $categorySlug)
     {
         try {
             $primary_category = PrimaryCategory::where('additional_slug', $categorySlug)->first();
@@ -790,19 +790,20 @@ class ProductController extends Controller
             ], 500);
         }
     }
-
-    /**New implement */
+	
+	
+	/**New implement */
     public function productCatalogForAllParams(Request $request, $first, $second = null, $third = null)
     {
         try {
-            // Case: category + attribute + value
+            // category + attribute + value
             if ($second !== null && $third !== null) {
                 return $this->buildCategoryAttributeValueResponse($request, $first, $second, $third);
             }
-    
+
             // Case: only one slug given -> could be Tag or Category
             if ($second === null && $third === null) {
-    
+
                 $tag = Tag::select('id', 'title', 'slug', 'meta_title', 'meta_description', 'content')
                     ->where('slug', $first)
                     ->where('status', true)
@@ -810,45 +811,40 @@ class ProductController extends Controller
                 if ($tag) {
                     return $this->buildTagResponse($request, $tag);
                 }
-    
+
                 $category = Category::select('id', 'title', 'slug')->where('slug', $first)->first();
                 if ($category) {
                     return $this->buildCategoryResponse($request, $category);
                 }
-    
-                return response()->json(['success' => false, 'message' => 'Not found'], 404);
+
+                return $this->notFoundResponse('No category or tag found for "' . $first . '".');
             }
-    
-            // exactly 2 segments given -> not a valid combination in this app
-            return response()->json(['success' => false, 'message' => 'Invalid URL'], 404);
-    
-        } catch (\Exception $e) {
-            Log::error('Error in catalog: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
-            return response()->json(['error' => $e->getMessage(), 'line' => $e->getLine()], 500);
+            return $this->invalidRequestResponse('This URL format is not supported. Expected /shop/{slug} or /shop/{category}/{attribute}/{value}.');
+
+        } catch (\Throwable $e) {
+            return $this->serverErrorResponse($e, 'Something went wrong while loading the catalog.');
         }
     }
-    
-    /*BRANCH 1: TAG   (e.g. new-arrival, trending) */
+
+    /*BRANCH 1: TAG   (new-arrival, trending) */
     private function buildTagResponse(Request $request, Tag $tag)
     {
         $productsQuery = Product::where('product_status', 1)
             ->whereHas('tags', function ($q) use ($tag) {
                 $q->where('tags.id', $tag->id);
             });
-    
+
         $this->applyDynamicFilters($request, $productsQuery);
         $this->applySort($request, $productsQuery);
-    
+
         $products = $this->getPaginatedProducts($productsQuery, 30);
         $filters = $this->getTagFilterList($tag);
-    
-        $siteName = "Kasi Bunkari";
-        $title = !empty($tag->meta_title) ? $tag->meta_title : $tag->title . ' | ' . $siteName;
+
+        $title = !empty($tag->meta_title) ? $tag->meta_title : $tag->title;
         $description = !empty($tag->meta_description)
             ? $tag->meta_description
-            : 'Explore our ' . $tag->title . ' collection at ' . $siteName . '.';
-    
+            : 'Explore our ' . $tag->title . ' collection at Kasi Bunkari.';
+
         return response()->json([
             'success' => true,
             'message' => 'Tag products retrieved successfully',
@@ -857,7 +853,7 @@ class ProductController extends Controller
                 'meta' => [
                     'title' => Str::limit($title, 60, ''),
                     'description' => Str::limit($description, 160, ''),
-                    'keywords' => $siteName . ', ' . $tag->title
+                    'keywords' => 'Kasi Bunkari, ' . $tag->title
                 ],
                 'tag' => [
                     'id' => $tag->id,
@@ -871,21 +867,21 @@ class ProductController extends Controller
             ]
         ]);
     }
-    
+
     /*  BRANCH 2: CATEGORY ONLY */
     private function buildCategoryResponse(Request $request, Category $category)
     {
         $primary_category = PrimaryCategory::where('additional_slug', $category->slug)->first();
-    
+
         $productsQuery = Product::where('category_id', $category->id)->where('product_status', 1);
-    
+
         $this->applyDynamicFilters($request, $productsQuery);
         $this->applySort($request, $productsQuery);
-    
+
         $products = $this->getPaginatedProducts($productsQuery, 12);
         $filters = $this->getCategoryFilterList($category, null, null, false);
         $meta = $this->buildMeta($primary_category, $primary_category->title ?? $category->title, null);
-    
+
         return response()->json([
             'success' => true,
             'message' => 'Category products retrieved successfully',
@@ -900,44 +896,44 @@ class ProductController extends Controller
             ]
         ]);
     }
-    
+
     /*  BRANCH 3: CATEGORY + ATTRIBUTE + VALUE */
     private function buildCategoryAttributeValueResponse(Request $request, $categorySlug, $attributeSlug, $valueSlug)
     {
         $additional_slug = $categorySlug . '-' . $valueSlug . '-' . $attributeSlug;
         $primary_category = PrimaryCategory::where('additional_slug', $additional_slug)->first();
-    
+
         $category = Category::select('id', 'title', 'slug')->where('slug', $categorySlug)->first();
         if (!$category) {
-            return response()->json(['success' => false, 'message' => 'Category not found'], 404);
+            return $this->notFoundResponse('Category "' . $categorySlug . '" was not found.');
         }
-    
+
         $attribute_top = Attribute::select('id', 'title', 'slug')->where('slug', $attributeSlug)->first();
         if (!$attribute_top) {
-            return response()->json(['success' => false, 'message' => 'Attribute not found'], 404);
+            return $this->notFoundResponse('Attribute "' . $attributeSlug . '" was not found.');
         }
-    
+
         $attributeValue = Attribute_values::select('id', 'name', 'slug')->where('slug', $valueSlug)->first();
         if (!$attributeValue) {
-            return response()->json(['success' => false, 'message' => 'Attribute value not found'], 404);
+            return $this->notFoundResponse('Attribute value "' . $valueSlug . '" was not found.');
         }
-    
+
         $productsQuery = Product::where('category_id', $category->id)->where('product_status', 1);
-    
+
         $productsQuery->whereHas('productAttributesValues.attributeValue', function ($q) use ($attribute_top, $attributeValue) {
             $q->where('slug', $attributeValue->slug)
                 ->whereHas('attribute', function ($q2) use ($attribute_top) {
                     $q2->where('slug', $attribute_top->slug);
                 });
         });
-    
+
         $this->applyDynamicFilters($request, $productsQuery, $attribute_top->slug);
         $this->applySort($request, $productsQuery);
-    
+
         $products = $this->getPaginatedProducts($productsQuery, 30);
         $filters = $this->getCategoryFilterList($category, $attribute_top, $attributeValue, true);
         $meta = $this->buildMeta($primary_category, $primary_category->title ?? $category->title, $attributeValue->name);
-    
+
         return response()->json([
             'success' => true,
             'message' => 'Products retrieved successfully',
@@ -954,9 +950,9 @@ class ProductController extends Controller
             ]
         ]);
     }
-    
+
     /* SHARED HELPERS (used by all 3 branches) */
-    
+
     private function applyDynamicFilters(Request $request, $productsQuery, $excludeAttributeSlug = null)
     {
         if (!$request->has('filter')) {
@@ -982,7 +978,7 @@ class ProductController extends Controller
             }
         }
     }
-    
+
     private function applySort(Request $request, $productsQuery)
     {
         $sortOption = $request->get('sort');
@@ -1004,7 +1000,7 @@ class ProductController extends Controller
                 break;
         }
     }
-    
+
     private function getPaginatedProducts($productsQuery, $perPage)
     {
         return $productsQuery->with([
@@ -1044,11 +1040,12 @@ class ProductController extends Controller
                     'image' => isset($product->images[0])
                         ? asset('storage/images/product/small/' . $product->images[0]->image_path)
                         : null,
-                    'attributes_value_slug' => $attributes_value
+                    'attributes_value_slug' => $attributes_value,
+                    'category' => optional($product->category)->title,
                 ];
             });
     }
-    
+
     private function buildPagination($products)
     {
         return [
@@ -1062,7 +1059,7 @@ class ProductController extends Controller
             'has_previous_page' => $products->currentPage() > 1
         ];
     }
-    
+
     private function buildPrimaryCategoryData($primary_category)
     {
         return [
@@ -1071,39 +1068,45 @@ class ProductController extends Controller
             'long_content' => $primary_category ? $primary_category->primary_category_description : null,
         ];
     }
-    
+
+    /**
+     * NOTE: Site name removed from the meta TITLE (per request).
+     * It's still kept in description/keywords for SEO context — remove those too if not wanted.
+     */
     private function buildMeta($primary_category, $categoryTitle, $attributeName = null)
     {
         $siteName = "Kasi Bunkari";
         $shortHeading = $primary_category->short_heading ?? null;
-    
+
         if ($attributeName) {
-            $fallbackTitle = $attributeName . ' ' . $categoryTitle . ' | ' . $siteName;
+            $fallbackTitle = $attributeName . ' ' . $categoryTitle;
             $fallbackDescription = 'Buy ' . $attributeName . ' ' . $categoryTitle . ' from ' . $siteName
                 . '. Explore premium quality ' . $categoryTitle . ' crafted with the best ' . $attributeName . '.';
             $keywords = $siteName . ', ' . $categoryTitle . ', ' . $attributeName . ' ' . $categoryTitle;
         } else {
-            $fallbackTitle = $categoryTitle . ' | ' . $siteName;
+            $fallbackTitle = $categoryTitle;
             $fallbackDescription = $shortHeading
                 ? $shortHeading . ' - Explore and buy ' . $categoryTitle . ' at best prices from ' . $siteName
                 : 'Explore and buy ' . $categoryTitle . ' at best prices from ' . $siteName . '. High quality products with fast delivery.';
             $keywords = $siteName . ', ' . $categoryTitle;
         }
-    
+
+        // meta_title (if set in admin) is used as-is; only the auto-generated
+        // fallback title has the site name stripped out.
         $title = $primary_category && !empty($primary_category->meta_title) ? $primary_category->meta_title : $fallbackTitle;
         $description = $primary_category && !empty($primary_category->meta_description) ? $primary_category->meta_description : $fallbackDescription;
-    
+
         return [
             'title' => Str::limit($title, 60, ''),
             'description' => Str::limit($description, 160, ''),
             'keywords' => $keywords
         ];
     }
-    
+
     private function getCategoryFilterList($category, $attribute_top, $attributeValue, $isFiltered)
     {
         $query = $category->attributes()->select('attributes.id', 'attributes.title', 'attributes.slug');
-    
+
         if ($isFiltered) {
             $query->whereHas('AttributesValues', function ($q) use ($category, $attribute_top, $attributeValue) {
                 $q->whereHas('map_attributes_value_to_categories', function ($q2) use ($category) {
@@ -1122,7 +1125,7 @@ class ProductController extends Controller
                     });
             });
         }
-    
+
         $query->with(['AttributesValues' => function ($query) use ($category, $isFiltered, $attribute_top, $attributeValue) {
             $query->select('id', 'attributes_id', 'name', 'slug')
                 ->whereHas('map_attributes_value_to_categories', function ($q) use ($category) {
@@ -1147,7 +1150,7 @@ class ProductController extends Controller
                 ->orderBy('name');
         }])
         ->orderBy('title');
-    
+
         return $query->get()
             ->when($isFiltered, function ($collection) {
                 return $collection->filter(fn($attribute) => $attribute->AttributesValues->isNotEmpty());
@@ -1166,7 +1169,7 @@ class ProductController extends Controller
             })
             ->values();
     }
-    
+
     private function getTagFilterList(Tag $tag)
     {
         return Attribute::select('id', 'title', 'slug')
@@ -1204,5 +1207,62 @@ class ProductController extends Controller
             ])
             ->values();
     }
+
+    /* =========================================================================
+     |  STANDARDIZED ERROR RESPONSES
+     * ========================================================================= */
+
+    private function notFoundResponse(string $message)
+    {
+        return response()->json([
+            'success' => false,
+            'error_code' => 'NOT_FOUND',
+            'message' => $message
+        ], 404);
+    }
+
+    private function invalidRequestResponse(string $message)
+    {
+        return response()->json([
+            'success' => false,
+            'error_code' => 'INVALID_REQUEST',
+            'message' => $message
+        ], 400);
+    }
+
+    /**
+     * Logs the full exception server-side (for debugging) but sends only a
+     * safe, generic message to the client — never the raw exception message,
+     * file path, or line number, since that leaks internal implementation
+     * details. When app.debug is true (local dev), the real message is
+     * included to make debugging easier.
+     */
+    private function serverErrorResponse(\Throwable $e, string $userMessage)
+    {
+        Log::error($userMessage . ' | ' . $e->getMessage(), [
+            'exception' => $e,
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'trace' => $e->getTraceAsString(),
+        ]);
+
+        $payload = [
+            'success' => false,
+            'error_code' => 'SERVER_ERROR',
+            'message' => $userMessage,
+        ];
+
+        if (config('app.debug')) {
+            $payload['debug'] = [
+                'exception' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ];
+        }
+
+        return response()->json($payload, 500);
+    }
     /**New implement */
+
+    
 }
