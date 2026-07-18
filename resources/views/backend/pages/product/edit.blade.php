@@ -10,6 +10,17 @@
    <form method="POST" action="{{ route('product.update', $data['product']->id) }}" accept-charset="UTF-8" id="product_form_edit" enctype="multipart/form-data">
       @csrf
       @method('PUT')
+      @if ($errors->any())
+         <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <strong>Please fix the following errors:</strong>
+            <ul class="mb-0 mt-2">
+                  @foreach ($errors->all() as $error)
+                     <li>{{ $error }}</li>
+                  @endforeach
+            </ul>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+         </div>
+      @endif
       <div class="row">
          <div class="col-xl-7 col-lg-7">
             <div class="card">
@@ -312,7 +323,7 @@
                                        name="tags[]"
                                        id="tag{{ $tag->id }}"
                                        value="{{ $tag->id }}"
-                                       {{ $data['product']->tags->contains($tag->id) ? 'checked' : '' }}
+                                       {{ in_array($tag->id, old('tags', $data['product']->tags->pluck('id')->toArray())) ? 'checked' : '' }}
                                     >
                                     <label class="form-check-label" for="tag{{ $tag->id }}">
                                        {{ $tag->title }}
@@ -445,7 +456,7 @@
                      <div class="col-lg-12">
                         <div class="mb-2">
                            <label for="meta_title" class="form-label">Product Short Description</label>
-                           <textarea class="form-control bg-light-subtle" id="product_short_description" rows="3" name="product_short_description" placeholder="Short description about product">{{ $data['product']->product_short_description }}</textarea>
+                           <textarea class="form-control bg-light-subtle" id="product_short_description" rows="3" name="product_short_description" placeholder="Short description about product">{{ old('product_short_description', $data['product']->product_short_description) }}</textarea>
                         </div>
                      </div>
                      <div class="col-lg-12">
@@ -454,7 +465,7 @@
                               Product Description
                            </h5>
                            <div class="mb-3">
-                              <textarea name="product_description" class="hidden-textarea ckeditor4">{!! $data['product']->product_description !!}</textarea>
+                              <textarea name="product_description" class="hidden-textarea ckeditor4">{!! old('product_description', $data['product']->product_description) !!}</textarea>
                            </div>
                         </div>
                      </div>
@@ -466,7 +477,7 @@
                               Product Specification
                            </h5>
                            <div class="mb-3">                              
-                              <textarea name="product_specification" class="hidden-textarea ckeditor4">{!! $data['product']->product_specification !!}</textarea>
+                              <textarea name="product_specification" class="hidden-textarea ckeditor4">{!! old('product_specification', $data['product']->product_specification) !!}</textarea>
                            </div>
                         </div>
                      </div>

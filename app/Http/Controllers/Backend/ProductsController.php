@@ -389,20 +389,22 @@ class ProductsController extends Controller
         */
         //Log::info('Request Data:', $request->all());
         //dd($request->all());
+        $request->merge(['product_slug' => Str::slug($request->input('product_slug'))]);
+
+        $request->validate([
+            'product_name' => 'required',
+            'product_slug' => [
+                'required',
+                Rule::unique('products', 'slug')->ignore($id),
+            ],
+            'product_categories' => 'required',
+            'hsn_code' => 'nullable|regex:/^\d{4}(\d{2}){0,1}(\d{2}){0,1}$/',
+            'gst_in_percentage' => 'nullable|numeric|min:0|max:100',
+            'tags' => 'nullable|array',
+            'tags.*' => 'exists:tags,id',
+        ]);
         try {
-            DB::beginTransaction(); 
-            $request->validate([
-                'product_name' => 'required',
-                'product_slug' => [
-                    'required',
-                    Rule::unique('products', 'slug')->ignore($id),
-                ],
-                'product_categories' => 'required',
-                'hsn_code' => 'nullable|regex:/^\d{4}(\d{2}){0,1}(\d{2}){0,1}$/',
-                'gst_in_percentage' => 'nullable|numeric|min:0|max:100',
-                'tags' => 'nullable|array',
-                'tags.*' => 'exists:tags,id',                  
-            ]);
+            DB::beginTransaction();             
             $update_product_row = Product::findOrFail($id);
             /*make unique slug */
             $slug = Str::slug($request->product_slug);
@@ -576,7 +578,7 @@ class ProductsController extends Controller
         catch (\Exception $e) {
             DB::rollback();
             Log::error('Error updating product: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Error updating product: ' . $e->getMessage());
+            return redirect()->back()->with('error', $e->getMessage());
         }
     }
 
