@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\Api;
+use Illuminate\Support\Collection;
 use Illuminate\Http\Request;
 use App\Models\Category;
 use App\Models\Product;
@@ -15,62 +16,161 @@ use Illuminate\Support\Facades\Cache;
 
 class SearchController extends Controller
 {
+    private function normalize(string $value): string
+    {
+        $value = strtolower(trim($value));
+        return preg_replace('/(.)\1{2,}/', '$1', $value);
+    }
+
+    private function isFuzzyMatch(string $term, string $word): bool
+    {
+        $termN = $this->normalize($term);
+        $wordN = $this->normalize($word);
+ 
+        if ($termN === '' || $wordN === '') {
+            return false;
+        }
+ 
+        if ($termN === $wordN || str_contains($wordN, $termN) || str_contains($termN, $wordN)) {
+            return true;
+        }
+ 
+        $distance = levenshtein($termN, $wordN);
+ 
+        $threshold = match (true) {
+            strlen($wordN) <= 3 => 1,
+            strlen($wordN) <= 6 => 2,
+            default => 3,
+        };
+ 
+        return $distance <= $threshold;
+    }
+
+    private function textMatchesTerms(string $text, array $searchTerms): bool
+    {
+        $words = preg_split('/\s+/', trim($text));
+ 
+        foreach ($searchTerms as $term) {
+            foreach ($words as $word) {
+                if ($this->isFuzzyMatch($term, $word)) {
+                    return true;
+                }
+            }
+        }
+ 
+        return false;
+    } 
+    
+    private function resolveMatchedIds(
+        Collection $fastResults,
+        string $cacheKey,
+        callable $fetchAllFn,
+        string $column,
+        array $searchTerms,
+        int $limit = 5
+    ): Collection {
+        if ($fastResults->isNotEmpty()) {
+            return $fastResults->pluck('id')->take($limit);
+        }
+         $lookup = Cache::remember($cacheKey, now()->addHours(6), $fetchAllFn);
+ 
+        return $lookup
+            ->filter(fn ($row) => $this->textMatchesTerms($row->{$column}, $searchTerms))
+            ->pluck('id')
+            ->take($limit);
+    }
+ 
     public function searchSuggestions(Request $request)
     {
         $query = trim($request->input('query', ''));
-        if (empty(trim($query))) {
+        if (empty($query)) {
             return response()->json(['suggestions' => []]);
         }
-        Log::error('suggestion log: ' . $query);           
-        $searchTerms = explode(' ', $query);
-        /* Search products */
+ 
+        Log::info('Search suggestion query: ' . $query);
+ 
+        $searchTerms = preg_split('/\s+/', $query);
         $booleanQuery = '+' . implode(' +', $searchTerms);
-        $products = Product::whereRaw("MATCH(title) AGAINST(? IN BOOLEAN MODE)", [$booleanQuery])
-            ->orWhere(function ($query) use ($searchTerms) {
+ 
+        /* ---------- Products: fast SQL first ---------- */
+        $fastProducts = Product::where('product_status', 1)
+            ->where(function ($q) use ($searchTerms, $booleanQuery) {
+                $q->whereRaw("MATCH(title) AGAINST(? IN BOOLEAN MODE)", [$booleanQuery]);
                 foreach ($searchTerms as $term) {
-                    $query->orWhere('title', 'like', '%' . $term . '%');
-                }
-                foreach ($searchTerms as $term) {
-                    $query->orWhereRaw("SOUNDEX(?) = SOUNDEX(SUBSTRING_INDEX(title, ' ', 1))", [$term]);
+                    $q->orWhere('title', 'like', '%' . $term . '%');
                 }
             })
+            ->limit(5)
+            ->get(['id', 'title']);
+ 
+        $matchedProductIds = $this->resolveMatchedIds(
+            $fastProducts,
+            'search_lookup_products',
+            fn () => Product::where('product_status', 1)->get(['id', 'title']),
+            'title',
+            $searchTerms
+        );
+ 
+        /* ---------- Categories: fast SQL first ---------- */
+        $fastCategories = Category::where(function ($q) use ($searchTerms) {
+            foreach ($searchTerms as $term) {
+                $q->orWhere('title', 'like', '%' . $term . '%');
+            }
+        })
+            ->limit(5)
+            ->get(['id', 'title']);
+ 
+        $matchedCategoryIds = $this->resolveMatchedIds(
+            $fastCategories,
+            'search_lookup_categories',
+            fn () => Category::get(['id', 'title']),
+            'title',
+            $searchTerms
+        );
+ 
+        /* ---------- Attribute values: fast SQL first ---------- */
+        $fastAttributeValues = Attribute_values::where(function ($q) use ($searchTerms) {
+            foreach ($searchTerms as $term) {
+                $q->orWhere('name', 'like', '%' . $term . '%');
+            }
+        })
+            ->limit(5)
+            ->get(['id', 'name']);
+ 
+        $matchedAttributeValueIds = $this->resolveMatchedIds(
+            $fastAttributeValues,
+            'search_lookup_attribute_values',
+            fn () => Attribute_values::get(['id', 'name']),
+            'name',
+            $searchTerms
+        );
+ 
+        /* ---------- Fetch full data only for matched IDs ---------- */
+        $products = Product::whereIn('products.id', $matchedProductIds)
             ->with([
                 'firstImage',
                 'category',
-                'ProductAttributesValues' => function ($query) {
-                    $query->select('id', 'product_id', 'product_attribute_id', 'attributes_value_id')
-                    ->with(['attributeValue:id,slug'])
-                    ->orderBy('id');
+                'ProductAttributesValues' => function ($q) {
+                    $q->select('id', 'product_id', 'product_attribute_id', 'attributes_value_id')
+                        ->with(['attributeValue:id,slug'])
+                        ->orderBy('id');
                 }
             ])
             ->leftJoin('inventories', function ($join) {
                 $join->on('products.id', '=', 'inventories.product_id')
-                ->whereRaw('inventories.mrp = (SELECT MIN(mrp) FROM inventories WHERE product_id = products.id)');
+                    ->whereRaw('inventories.mrp = (SELECT MIN(mrp) FROM inventories WHERE product_id = products.id)');
             })
             ->select('products.*', 'inventories.mrp', 'inventories.offer_rate', 'inventories.purchase_rate', 'inventories.sku')
-            ->limit(5)
-            ->get(['id', 'title', 'slug']); 
-
-        /* Search categories */
-        $categories = Category::where(function ($query) use ($searchTerms) {
-            foreach ($searchTerms as $term) {
-                $query->where('title', 'like', '%' . $term . '%');
-            }
-        })
-        ->limit(5)
-        ->get(['id', 'title']);
-
-        /* Search attribute values */
-        $attributeValues = Attribute_values::where(function ($query) use ($searchTerms) {
-            foreach ($searchTerms as $term) {
-                $query->where('name', 'like', '%' . $term . '%');
-            }
-        })
-        ->with('attribute')
-        ->limit(5)
-        ->get(['id', 'name as title', 'attributes_id']);
+            ->get();
+ 
+        $categories = Category::whereIn('id', $matchedCategoryIds)->get(['id', 'title']);
+ 
+        $attributeValues = Attribute_values::whereIn('id', $matchedAttributeValueIds)
+            ->with('attribute')
+            ->get(['id', 'name as title', 'attributes_id']);
+ 
         $suggestions = collect();
-        
+ 
         /* Add attribute values (as suggestions) */
         $suggestions = $suggestions->merge($attributeValues->map(function ($value) {
             return [
@@ -79,41 +179,41 @@ class SearchController extends Controller
                 'image' => null,
             ];
         }));
-        
+ 
         /* Add categories (as suggestions) */
         $suggestions = $suggestions->merge($categories->map(function ($category) {
             return [
                 'type' => 'suggestion',
-                'title' =>  ucwords(strtolower($category->title)),
+                'title' => ucwords(strtolower($category->title)),
                 'image' => null,
             ];
         }));
-        $attributes_value = null;
+ 
+        /* Add products */
         $suggestions = $suggestions->merge($products->map(function ($product) {
             $image = $product->firstImage;
-            if($product->ProductAttributesValues->isNotEmpty()){
-                $attributes_value = $product->ProductAttributesValues->first()->attributeValue->slug;
+ 
+            $attributes_value = null;
+            if ($product->ProductAttributesValues->isNotEmpty()) {
+                $attributes_value = optional($product->ProductAttributesValues->first()->attributeValue)->slug;
             }
-            if ($product->offer_rate)
-            {
-                $offer_rate = 'Rs. ' . $product->offer_rate;
-            }
-            else
-            {
-                $offer_rate = null;
-            }
+ 
+            $offer_rate = $product->offer_rate ? 'Rs. ' . $product->offer_rate : null;
+ 
             return [
                 'type' => 'product',
                 'title' => ucwords(strtolower($product->title)),
                 'slug' => $product->slug,
                 'attributes_value_slug' => $attributes_value,
-                'category' => $product->category->title,
+                'category' => optional($product->category)->title,
                 'offer_rate' => $offer_rate,
                 'image' => $image ? asset('storage/images/product/icon/' . $image->image_path) : null,
             ];
         }));
+ 
         return response()->json(['suggestions' => $suggestions]);
     }
+ 
 
     public function searchProductList(Request $request)
     {
