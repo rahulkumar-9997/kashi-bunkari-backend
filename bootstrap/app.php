@@ -7,6 +7,7 @@ use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Http\Request;
+use Illuminate\Http\Middleware\HandleCors;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -19,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'check.device' => \App\Http\Middleware\CheckDevice::class,
         ]);
+        $middleware->prepend(HandleCors::class); 
     })
     ->withExceptions(function (Exceptions $exceptions): void {
 
