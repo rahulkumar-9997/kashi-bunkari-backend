@@ -17,16 +17,15 @@ return new class extends Migration
                 ->nullable()
                 ->constrained('customers')
                 ->cascadeOnDelete();
-            $table->string('session_id')->nullable();
             $table->foreignId('product_id')
+                ->nullable()
                 ->constrained('products')
                 ->cascadeOnDelete();
-            $table->integer('quantity')->default(1);
+            $table->foreignId('inventory_id')->nullable()->constrained('inventories')->nullOnDelete();
+            $table->unsignedInteger('quantity')->nullable();
             $table->timestamps();
-            $table->index('customer_id');
-            $table->index('session_id');
-            $table->index('product_id');
-        });
+            $table->unique(['customer_id', 'product_id']);
+        });        
     }
 
     /**

@@ -3,642 +3,381 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Cart;
-use App\Models\Product;
 use App\Models\Inventory;
+use App\Models\Product;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Validator;
 
 class CartController extends Controller
 {
+   
+    private const SESSION_KEY = 'cart';
+
     public function addToCart(Request $request)
     {
+        $validator = Validator::make($request->all(), [
+            'product_id' => 'required|integer|exists:products,id',
+            'quantity'   => 'nullable|integer|min:1',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->invalidRequestResponse($validator->errors()->first());
+        }
+
+        $productId = (int) $request->input('product_id');
+        $quantity  = (int) $request->input('quantity', 1);
+
+        $product = Product::where('id', $productId)->where('product_status', 1)->first();
+        if (!$product) {
+            return $this->notFoundResponse('Product not found or is unavailable.');
+        }
+
+        $inventory = $this->resolveCheapestInventory($productId);
+        if (!$inventory) {
+            return $this->invalidRequestResponse('This product currently has no purchasable inventory.');
+        }
+
+        if ($inventory->stock_quantity !== null && $inventory->stock_quantity < $quantity) {
+            return $this->invalidRequestResponse('Only ' . $inventory->stock_quantity . ' unit(s) left in stock.');
+        }
+
         try {
-            $validated = $request->validate([
-                'product_id'  => 'required|exists:products,id',
-                'quantity'    => 'required|integer|min:1',
-                'product_mrp' => 'nullable|numeric|min:0',
-            ], [
-                'product_id.required' => 'Product ID is required.',
-                'product_id.exists'   => 'Selected product does not exist.',
-                'quantity.required'   => 'Quantity is required.',
-                'quantity.min'        => 'Quantity must be at least 1.',
+            if (Auth::check()) {
+                $this->addToDbCart(Auth::id(), $productId, $inventory->id, $quantity);
+            } else {
+                $this->addToSessionCart($productId, $quantity);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Product added to cart.',
+                'data' => $this->buildCartResponse(),
             ]);
-            $productId = $validated['product_id'];
-            $quantity  = $validated['quantity'];
-            $mrp       = $validated['product_mrp'] ?? null;
-            $product = Product::where('id', $productId)
-                ->where('product_status', 1)
-                ->first();
-
-            if (!$product) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Product is currently unavailable.'
-                ], 404);
-            }
-
-            $inventoryQuery = Inventory::where('product_id', $productId);
-            if ($mrp) {
-                $inventoryQuery->where('mrp', $mrp);
-            }
-            $inventory = $inventoryQuery->first();
-            if (!$inventory) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Product inventory not found.'
-                ], 404);
-            }
-            $customerId = Auth::guard('sanctum')->check()
-                ? Auth::guard('sanctum')->id()
-                : null;
-
-            $sessionId = $this->getOrCreateSessionId($request);
-
-            DB::beginTransaction();
-            try {
-                $cart = Cart::where('product_id', $productId);                
-                if ($customerId) {
-                    $cart = $cart->where('customer_id', $customerId);
-                } else {
-                    $cart = $cart->where('session_id', $sessionId);
-                }                
-                $cart = $cart->first();
-
-                $existingQuantity = $cart ? $cart->quantity : 0;
-                $newQuantity      = $existingQuantity + $quantity;
-                if ($inventory->stock_quantity < $newQuantity) {
-                    DB::rollBack();
-                    return response()->json([
-                        'success' => false,
-                        'message' => "Only {$inventory->stock_quantity} items available in stock."
-                    ], 400);
-                }
-                if ($cart) {
-                    $cart->update(['quantity' => $newQuantity]);
-                } else {
-                    $cartData = [
-                        'product_id' => $productId,
-                        'quantity' => $quantity,
-                    ];
-                    
-                    if ($customerId) {
-                        $cartData['customer_id'] = $customerId;
-                        $cartData['session_id'] = null;
-                    } else {
-                        $cartData['customer_id'] = null;
-                        $cartData['session_id'] = $sessionId;
-                    }
-                    
-                    $cart = Cart::create($cartData);
-                }
-                DB::commit();
-                /* ── Build response with cookie */
-                $responseData = [
-                    'success'    => true,
-                    'message'    => 'Product added to cart successfully.',
-                    'data'       => $this->getCartDetailsWithInventory($customerId, $sessionId),
-                    'cart_count' => $this->getCartItemCount($customerId, $sessionId),
-                ];
-                if (!$customerId) {
-                    $responseData['session_id'] = $sessionId;
-                }
-
-                $response = response()->json($responseData, 200);
-
-                if (!$customerId && !$request->cookie('cart_session_id')) {
-                    $response->cookie(
-                        'cart_session_id',
-                        $sessionId,
-                        60 * 24 * 30, // 30 days
-                        '/',
-                        null,
-                        false, // Set to true in production with HTTPS
-                        true // HttpOnly
-                    );
-                }
-
-                return $response;
-            } catch (\Throwable $e) {
-                DB::rollBack();
-                Log::error('Cart Transaction Error:', ['error' => $e->getMessage()]);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Something went wrong while adding to cart.'
-                ], 500);
-            }
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed.',
-                'errors'  => $e->errors()
-            ], 422);
         } catch (\Throwable $e) {
-            Log::error('Cart General Error:', ['error' => $e->getMessage()]);
-            return response()->json([
-                'success' => false,
-                'message' => 'Server error. Please try again later.'
-            ], 500);
+            return $this->serverErrorResponse($e, 'Could not add the product to your cart.');
         }
     }
 
-    private function getOrCreateSessionId(Request $request): string
-    {
-       
-        $sessionId = $request->header('X-Session-ID');
-        if ($sessionId) {
-            return $sessionId;
-        }
-        $sessionId = $request->cookie('cart_session_id');
-        if ($sessionId) {
-            return $sessionId;
-        }
-        $sessionId = Session::get('cart_session_id');
-        if ($sessionId) {
-            return $sessionId;
-        }
-        return $this->generatePersistentSessionId();
-    }
-
-    /**
-     * Generate a new unique session ID and persist it in the Laravel session.
-     */
-    private function generatePersistentSessionId(): string
-    {
-        $sessionId = md5(uniqid('cart_', true) . time());
-        Session::put('cart_session_id', $sessionId);
-        Session::save();
-        return $sessionId;
-    }
-
-    /**
-     * Get cart list with inventory details
-     */
+   
     public function cartList(Request $request)
     {
         try {
-            $customerId = null;
-            if (Auth::guard('sanctum')->check()) {
-                $customerId = Auth::guard('sanctum')->id();
-            }
-            $sessionId = $request->cookie('cart_session_id'); 
-            Log::info("Cart Products", [
-                'session_id' => $sessionId
-            ]);
-
-            $cartData = $this->getCartDetailsWithInventory($customerId, $sessionId);
-            $cartCount = $this->getCartItemCount($customerId, $sessionId);
             return response()->json([
                 'success' => true,
-                'data' => $cartData,
-                'cart_count' => $cartCount
+                'message' => 'Cart fetched successfully.',
+                'data' => $this->buildCartResponse(),
             ]);
-        } catch (\Exception $e) {
-            Log::error('Cart List Error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to retrieve cart',
-                'error' => config('app.debug') ? $e->getMessage() : null
-            ], 500);
+        } catch (\Throwable $e) {
+            return $this->serverErrorResponse($e, 'Could not load your cart.');
         }
     }
 
-    /**
-     * Update cart item quantity with inventory check
-     */
+   
     public function updateCartItem(Request $request, $id)
     {
+        $validator = Validator::make($request->all(), [
+            'quantity' => 'required|integer|min:1',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->invalidRequestResponse($validator->errors()->first());
+        }
+
+        $productId = (int) $id;
+        $quantity = (int) $request->input('quantity');
+
         try {
-            $validated = $request->validate([
-                'quantity' => 'required|integer|min:0|max:999'
-            ]);            
-            $quantity = $validated['quantity'];
-            $customerId = null;
-            if (Auth::guard('sanctum')->check()) {
-                $customerId = Auth::guard('sanctum')->id();
-            }
-            $sessionId = $request->cookie('cart_session_id');            
-            Log::info("Cart Products", [
-                'session_id' => $sessionId
-            ]);            
-            DB::beginTransaction();            
-            $cartItem = Cart::where('id', $id);            
-            if ($customerId) {
-                $cartItem = $cartItem->where('customer_id', $customerId);
+            if (Auth::check()) {
+                $cartItem = Cart::where('user_id', Auth::id())->where('product_id', $productId)->first();
+                if (!$cartItem) {
+                    return $this->notFoundResponse('This product is not in your cart.');
+                }
+
+                $inventory = $cartItem->inventory_id
+                    ? Inventory::find($cartItem->inventory_id)
+                    : $this->resolveCheapestInventory($productId);
+
+                if ($inventory && $inventory->stock_quantity !== null && $inventory->stock_quantity < $quantity) {
+                    return $this->invalidRequestResponse('Only ' . $inventory->stock_quantity . ' unit(s) left in stock.');
+                }
+
+                $cartItem->quantity = $quantity;
+                $cartItem->save();
             } else {
-                $cartItem = $cartItem->where('session_id', $sessionId);
-            }            
-            $cartItem = $cartItem->first();            
-            if (!$cartItem) {
-                DB::rollBack();
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cart item not found'
-                ], 404);
-            }            
-            if ($quantity <= 0) {
-                $cartItem->delete();
-                DB::commit();
-                $cartData = $this->getCartDetailsWithInventory($customerId, $sessionId);
-                $cartCount = $this->getCartItemCount($customerId, $sessionId);
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Item removed from cart',
-                    'data' => $cartData,
-                    'cart_count' => $cartCount
-                ]);
+                $cart = session(self::SESSION_KEY, []);
+                if (!isset($cart[$productId])) {
+                    return $this->notFoundResponse('This product is not in your cart.');
+                }
+
+                $inventory = $this->resolveCheapestInventory($productId);
+                if ($inventory && $inventory->stock_quantity !== null && $inventory->stock_quantity < $quantity) {
+                    return $this->invalidRequestResponse('Only ' . $inventory->stock_quantity . ' unit(s) left in stock.');
+                }
+
+                $cart[$productId]['quantity'] = $quantity;
+                session([self::SESSION_KEY => $cart]);
             }
-            
-            $inventory = Inventory::where('product_id', $cartItem->product_id)
-                ->orderBy('mrp')
-                ->first();
-            
-            if (!$inventory || $inventory->stock_quantity < $quantity) {
-                DB::rollBack();
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Not enough stock available. Only ' . ($inventory->stock_quantity ?? 0) . ' items in stock.'
-                ], 400);
-            }
-            
-            $cartItem->quantity = $quantity;
-            $cartItem->save();
-            
-            DB::commit();
-            
-            $cartData = $this->getCartDetailsWithInventory($customerId, $sessionId);
-            $cartCount = $this->getCartItemCount($customerId, $sessionId);
-            
+
             return response()->json([
                 'success' => true,
-                'message' => 'Cart updated successfully',
-                'data' => $cartData,
-                'cart_count' => $cartCount
+                'message' => 'Cart updated.',
+                'data' => $this->buildCartResponse(),
             ]);
-            
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            if (DB::transactionLevel() > 0) {
-                DB::rollBack();
-            }
-            return response()->json([
-                'success' => false,
-                'message' => $e->errors()['quantity'][0] ?? 'Validation failed',
-                'error' => $e->errors()
-            ], 422);
-            
-        } catch (\Exception $e) {
-            if (DB::transactionLevel() > 0) {
-                DB::rollBack();
-            }
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage(),
-                'error' => config('app.debug') ? $e->getMessage() : null
-            ], 500);
+        } catch (\Throwable $e) {
+            return $this->serverErrorResponse($e, 'Could not update your cart.');
         }
     }
-    /**
-     * Remove item from cart
-     */
-    public function removeFromCart(Request $request, $id)
+
+   
+    public function removeFromCart($id)
     {
+        $productId = (int) $id;
+
         try {
-            $customerId = null;
-            if (Auth::guard('sanctum')->check()) {
-                $customerId = Auth::guard('sanctum')->id();
+            if (Auth::check()) {
+                Cart::where('user_id', Auth::id())->where('product_id', $productId)->delete();
+            } else {
+                $cart = session(self::SESSION_KEY, []);
+                unset($cart[$productId]);
+                session([self::SESSION_KEY => $cart]);
             }
 
-            $sessionId = $request->cookie('cart_session_id');            
-            Log::info("removeFromCart", [
-                'cart_id' => $id,
-                'customer_id' => $customerId,
-                'session_id' => $sessionId
+            return response()->json([
+                'success' => true,
+                'message' => 'Item removed from cart.',
+                'data' => $this->buildCartResponse(),
             ]);
-            DB::beginTransaction();
-            try {
-                $cartItem = Cart::where('id', $id);            
-                    if ($customerId) {
-                        $cartItem = $cartItem->where('customer_id', $customerId);
-                    } else {
-                        $cartItem = $cartItem->where('session_id', $sessionId);
-                    }            
-                    $cartItem = $cartItem->first(); 
+        } catch (\Throwable $e) {
+            return $this->serverErrorResponse($e, 'Could not remove the item from your cart.');
+        }
+    }
 
-                if (!$cartItem) {
-                    DB::rollBack();
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Cart item not found'
-                    ], 404);
+    
+    public function clearCart()
+    {
+        try {
+            if (Auth::check()) {
+                Cart::where('user_id', Auth::id())->delete();
+            } else {
+                session()->forget(self::SESSION_KEY);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cart cleared.',
+                'data' => $this->buildCartResponse(),
+            ]);
+        } catch (\Throwable $e) {
+            return $this->serverErrorResponse($e, 'Could not clear your cart.');
+        }
+    }
+
+   
+    public function mergeSessionCartIntoUser(int $userId): void
+    {
+        $sessionCart = session(self::SESSION_KEY, []);
+        if (empty($sessionCart)) {
+            return;
+        }
+
+        DB::transaction(function () use ($sessionCart, $userId) {
+            foreach ($sessionCart as $productId => $item) {
+                $quantity = (int) ($item['quantity'] ?? 1);
+                if ($quantity < 1) {
+                    continue;
                 }
 
-                $cartItem->delete();
-                DB::commit();
-                $cartData = $this->getCartDetailsWithInventory($customerId, $sessionId);
-                $cartCount = $this->getCartItemCount($customerId, $sessionId);
+                $product = Product::where('id', $productId)->where('product_status', 1)->first();
+                if (!$product) {
+                    continue;
+                }
 
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Item removed from cart successfully',
-                    'data' => $cartData,
-                    'cart_count' => $cartCount
-                ]);
-            } catch (\Exception $e) {
-                DB::rollBack();
-                Log::error('Remove Cart Error (Transaction): ' . $e->getMessage());
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to remove item from cart',
-                    'error' => config('app.debug') ? $e->getMessage() : null
-                ], 500);
-            }
-        } catch (\Exception $e) {
-            Log::error('Remove Cart Error (General): ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'An unexpected error occurred',
-                'error' => config('app.debug') ? $e->getMessage() : null
-            ], 500);
-        }
-    }
+                $inventory = $this->resolveCheapestInventory($productId);
 
-    /**
-     * Clear entire cart
-     */
-    public function clearCart(Request $request)
-    {
-        try {
-            $customerId = null;
-            if (Auth::guard('sanctum')->check()) {
-                $customerId = Auth::guard('sanctum')->id();
-            }
-
-            $sessionId = Session::getId();
-
-            DB::beginTransaction();
-
-            try {
-                if ($customerId) {
-                    Cart::where('customer_id', $customerId)->delete();
+                $existing = Cart::where('user_id', $userId)->where('product_id', $productId)->first();
+                if ($existing) {
+                    $existing->quantity += $quantity;
+                    if ($inventory && $inventory->stock_quantity !== null) {
+                        $existing->quantity = min($existing->quantity, $inventory->stock_quantity);
+                    }
+                    $existing->save();
                 } else {
-                    Cart::where('session_id', $sessionId)->delete();
-                }
-
-                DB::commit();
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Cart cleared successfully',
-                    'data' => [
-                        'items' => [],
-                        'total_items' => 0,
-                        'total_price' => 0,
-                        'item_count' => 0,
-                        'subtotal' => 0
-                    ],
-                    'cart_count' => 0
-                ]);
-            } catch (\Exception $e) {
-                DB::rollBack();
-                Log::error('Clear Cart Error (Transaction): ' . $e->getMessage());
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to clear cart',
-                    'error' => config('app.debug') ? $e->getMessage() : null
-                ], 500);
-            }
-        } catch (\Exception $e) {
-            Log::error('Clear Cart Error (General): ' . $e->getMessage());
-
-            return response()->json([
-                'success' => false,
-                'message' => 'An unexpected error occurred',
-                'error' => config('app.debug') ? $e->getMessage() : null
-            ], 500);
-        }
-    }
-
-    /**
-     * Merge guest cart with user cart after login
-     */
-    public function mergeCartAfterLogin(Request $request)
-    {
-        try {
-            $customerId = Auth::guard('sanctum')->id();
-
-            if (!$customerId) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'User not authenticated'
-                ], 401);
-            }
-
-            $sessionId = Session::getId();
-
-            DB::beginTransaction();
-
-            try {
-                $guestCartItems = Cart::where('session_id', $sessionId)
-                    ->whereNull('customer_id')
-                    ->get();
-
-                if ($guestCartItems->isEmpty()) {
-                    DB::commit();
-                    $cartData = $this->getCartDetailsWithInventory($customerId, null);
-                    $cartCount = $this->getCartItemCount($customerId, null);
-
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'No guest cart items to merge',
-                        'data' => $cartData,
-                        'cart_count' => $cartCount
+                    Cart::create([
+                        'user_id' => $userId,
+                        'product_id' => $productId,
+                        'inventory_id' => $inventory?->id,
+                        'quantity' => $inventory && $inventory->stock_quantity !== null
+                            ? min($quantity, $inventory->stock_quantity)
+                            : $quantity,
                     ]);
                 }
-
-                $mergedCount = 0;
-                $newCount = 0;
-
-                foreach ($guestCartItems as $guestItem) {
-                    // Check if product exists and is active
-                    $product = Product::where('id', $guestItem->product_id)
-                        ->where('product_status', 1)
-                        ->first();
-
-                    if (!$product) {
-                        $guestItem->delete();
-                        continue;
-                    }
-
-                    // Check inventory stock
-                    $inventory = Inventory::where('product_id', $guestItem->product_id)
-                        ->orderBy('mrp')
-                        ->first();
-
-                    // Check if product already exists in user's cart
-                    $userCartItem = Cart::where('customer_id', $customerId)
-                        ->where('product_id', $guestItem->product_id)
-                        ->first();
-
-                    if ($userCartItem) {
-                        $newQuantity = $userCartItem->quantity + $guestItem->quantity;
-
-                        // Check stock availability
-                        if ($inventory && $inventory->stock_quantity >= $newQuantity) {
-                            $userCartItem->quantity = $newQuantity;
-                            $userCartItem->save();
-                            $guestItem->delete();
-                            $mergedCount++;
-                        } else {
-                            // If not enough stock, keep existing quantity
-                            $guestItem->delete();
-                        }
-                    } else {
-                        // Check stock availability
-                        if ($inventory && $inventory->stock_quantity >= $guestItem->quantity) {
-                            $guestItem->customer_id = $customerId;
-                            $guestItem->session_id = null;
-                            $guestItem->save();
-                            $newCount++;
-                        } else {
-                            $guestItem->delete();
-                        }
-                    }
-                }
-
-                DB::commit();
-
-                $cartData = $this->getCartDetailsWithInventory($customerId, null);
-                $cartCount = $this->getCartItemCount($customerId, null);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Cart merged successfully',
-                    'data' => $cartData,
-                    'cart_count' => $cartCount,
-                    'meta' => [
-                        'merged_items' => $mergedCount,
-                        'new_items' => $newCount
-                    ]
-                ]);
-            } catch (\Exception $e) {
-                DB::rollBack();
-                Log::error('Merge Cart Error (Transaction): ' . $e->getMessage());
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to merge cart',
-                    'error' => config('app.debug') ? $e->getMessage() : null
-                ], 500);
             }
-        } catch (\Exception $e) {
-            Log::error('Merge Cart Error (General): ' . $e->getMessage());
+        });
 
-            return response()->json([
-                'success' => false,
-                'message' => 'An unexpected error occurred',
-                'error' => config('app.debug') ? $e->getMessage() : null
-            ], 500);
+        session()->forget(self::SESSION_KEY);
+    }
+
+    /* =========================================================================
+     |  INTERNAL HELPERS
+     * ========================================================================= */
+
+    private function addToDbCart(int $userId, int $productId, int $inventoryId, int $quantity): void
+    {
+        $cartItem = Cart::where('user_id', $userId)->where('product_id', $productId)->first();
+
+        if ($cartItem) {
+            $cartItem->quantity += $quantity;
+            $cartItem->inventory_id = $inventoryId; // keep pointing at the current cheapest inventory
+            $cartItem->save();
+        } else {
+            Cart::create([
+                'user_id' => $userId,
+                'product_id' => $productId,
+                'inventory_id' => $inventoryId,
+                'quantity' => $quantity,
+            ]);
         }
     }
 
-    /**
-     * Get complete cart details with inventory and product images
-     */
-    private function getCartDetailsWithInventory($customerId, $sessionId)
+    private function addToSessionCart(int $productId, int $quantity): void
     {
-        
-        $cartItems = Cart::where(function ($query) use ($customerId, $sessionId) {
-            if ($customerId) {
-                $query->where('customer_id', $customerId);
-            } else {
-                $query->where('session_id', $sessionId);
-            }
-        })
-        ->with([
-            'product' => function ($query) {
-                $query->where('product_status', 1)
-                    ->select('id', 'title', 'slug', 'category_id');
-            },
-            'product.category:id,title,slug',
-            'product.firstSortedImage:id,product_id,image_path',
-            'product.images:id,product_id,image_path,sort_order',
-            'product.inventories' => function ($query) {
-                $query->select('id', 'product_id', 'mrp', 'offer_rate', 'purchase_rate', 'sku', 'stock_quantity')
-                    ->orderBy('mrp', 'asc');
-            },
-            'product.productAttributesValues.attributeValue:id,slug'
-        ])
-        ->get();
-        Log::info("Cart Products:\n" . json_encode($cartItems, JSON_PRETTY_PRINT));
-        if ($cartItems->isEmpty()) {
-            return [
-                'items' => [],
-                'total_items' => 0,
-                'total_price' => 0,
-                'item_count' => 0,
-                'subtotal' => 0,
-                'delivery_charge' => 0,
-                'grand_total' => 0
-            ];
+        $cart = session(self::SESSION_KEY, []);
+        if (isset($cart[$productId])) {
+            $cart[$productId]['quantity'] += $quantity;
+        } else {
+            $cart[$productId] = ['quantity' => $quantity];
+        }
+        session([self::SESSION_KEY => $cart]);
+    }
+
+    /**
+     * "inventory cart check min mrp from product id" — always the cheapest
+     * inventory row for a given product.
+     */
+    private function resolveCheapestInventory(int $productId): ?Inventory
+    {
+        return Inventory::where('product_id', $productId)
+            ->orderBy('mrp', 'asc')
+            ->first();
+    }
+    
+    private function buildCartResponse(): array
+    {
+        if (Auth::check()) {
+            $items = Cart::where('user_id', Auth::id())
+                ->with([
+                    'product:id,title,slug,category_id',
+                    'product.category:id,title,slug',
+                    'product.firstSortedImage:id,product_id,image_path',
+                    'inventory:id,product_id,mrp,offer_rate,stock_quantity,sku',
+                ])
+                ->get()
+                ->map(fn($item) => $this->formatCartItem(
+                    $item->product_id,
+                    $item->quantity,
+                    $item->product,
+                    $item->inventory
+                ))
+                ->filter() // drop any items whose product/inventory vanished
+                ->values();
+        } else {
+            $sessionCart = session(self::SESSION_KEY, []);
+            $productIds = array_keys($sessionCart);
+
+            $products = Product::whereIn('id', $productIds)
+                ->where('product_status', 1)
+                ->with([
+                    'category:id,title,slug',
+                    'firstSortedImage:id,product_id,image_path',
+                ])
+                ->get()
+                ->keyBy('id');
+
+            $items = collect($sessionCart)
+                ->map(function ($item, $productId) use ($products) {
+                    $product = $products->get($productId);
+                    if (!$product) {
+                        return null;
+                    }
+                    $inventory = $this->resolveCheapestInventory((int) $productId);
+                    return $this->formatCartItem((int) $productId, (int) $item['quantity'], $product, $inventory);
+                })
+                ->filter()
+                ->values();
         }
 
-        $total = 0;
-        $totalItems = 0;
-        $formattedItems = [];
-        foreach ($cartItems as $cartItem) {
-            $product = $cartItem->product;
-            if (!$product) {
-                continue;
-            }
-            $inventory = $product->inventories->first();
-            $price = $inventory->offer_rate ?? $inventory->mrp ?? $product->product_sale_price ?? $product->product_price ?? 0;
-            $itemTotal = $price * $cartItem->quantity;
-            $total += $itemTotal;
-            $totalItems += $cartItem->quantity;
-            $attributeSlug = optional(
-                $product->productAttributesValues->first()
-            )->attributeValue->slug ?? null;
-            $attributeValue = optional(
-                $product->productAttributesValues->first()
-            )->attributeValue->value ?? null;
-            $formattedItems[] = [
-                'cart_id' => $cartItem->id,
-                'product_id' => $product->id,
-                'title' => $product->title,
-                'slug' => $product->slug,
-                'quantity' => $cartItem->quantity,
-                'mrp' => $inventory->mrp ?? $product->product_price ?? null,
-                'offer_rate' => $inventory->offer_rate ?? null,
-                'purchase_rate' => $inventory->purchase_rate ?? null,
-                'per_unit_price' => round($price, 2),
-                'total_price' => round($itemTotal, 2),
-                'attribute_value_slug' => $attributeSlug,
-                'category' => $product->category->title ?? null,
-                'category_slug' => $product->category->slug ?? null,                
-                'image' => $product->firstSortedImage ? $product->firstSortedImage->getSmallImages() : null,
-            ];
-        }
+        $subtotal = $items->sum(fn($item) => $item['line_total']);
 
         return [
-            'items' => $formattedItems,
-            'total_price' => round($total, 2),
-            'subtotal' => round($total, 2),
-            'item_count' => count($formattedItems),
-            'grand_total' => round($total, 2),
+            'items' => $items,
+            'item_count' => $items->count(),
+            'total_quantity' => $items->sum('quantity'),
+            'subtotal' => $subtotal,
+            'is_guest_cart' => !Auth::check(),
         ];
     }
 
-    private function getCartItemCount($customerId, $sessionId)
+    private function formatCartItem(int $productId, int $quantity, $product, $inventory): ?array
     {
-        if ($customerId) {
-            return Cart::where('customer_id', $customerId)->count();
-        } else {
-            return Cart::where('session_id', $sessionId)->count();
+        if (!$product) {
+            return null;
         }
+
+        $price = $inventory?->offer_rate ?? $inventory?->mrp;
+        $lineTotal = $price !== null ? $price * $quantity : null;
+
+        return [
+            'product_id' => $productId,
+            'title' => $product->title,
+            'slug' => $product->slug,
+            'category' => [
+                'title' => optional($product->category)->title,
+                'slug' => optional($product->category)->slug,
+            ],
+            'image' => $product->firstSortedImage
+                ? $product->firstSortedImage->getSmallImages()
+                : null,
+            'mrp' => $inventory?->mrp,
+            'offer_rate' => $inventory?->offer_rate,
+            'sku' => $inventory?->sku,
+            'in_stock' => $inventory === null || $inventory->stock_quantity === null || $inventory->stock_quantity > 0,
+            'available_stock' => $inventory?->stock_quantity,
+            'quantity' => $quantity,
+            'line_total' => $lineTotal,
+        ];
+    }
+
+    /* =========================================================================
+     |  STANDARDIZED ERROR RESPONSES
+     * ========================================================================= */
+
+    private function notFoundResponse(string $message)
+    {
+        return response()->json(['success' => false, 'error_code' => 'NOT_FOUND', 'message' => $message], 404);
+    }
+
+    private function invalidRequestResponse(string $message)
+    {
+        return response()->json(['success' => false, 'error_code' => 'INVALID_REQUEST', 'message' => $message], 400);
+    }
+
+    private function serverErrorResponse(\Throwable $e, string $userMessage)
+    {
+        Log::error($userMessage . ' | ' . $e->getMessage(), [
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'trace' => $e->getTraceAsString(),
+        ]);
+
+        $payload = ['success' => false, 'error_code' => 'SERVER_ERROR', 'message' => $userMessage];
+        if (config('app.debug')) {
+            $payload['debug'] = ['exception' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()];
+        }
+
+        return response()->json($payload, 500);
     }
 }

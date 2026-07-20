@@ -369,216 +369,249 @@ class SearchController extends Controller
 
 
     public function searchProductList(Request $request)
-    {
-        $query = trim($request->input('query', ''));
+	{
+		$query = trim($request->input('query', ''));
 
-        if (!$query) {
-            return response()->json([
-                'products' => [],
-                'categories' => [],
-                'product_filters' => [],
-                'query' => $query,
-            ]);
-        }
+		if (!$query) {
+			return response()->json([
+				'products' => [],
+				'categories' => [],
+				'product_filters' => [],
+				'query' => $query,
+			]);
+		}
 
-        $searchTerms = preg_split('/\s+/', $query);
-        $booleanQuery = '+' . implode(' +', $searchTerms);
-        $perPage = min((int) $request->input('per_page', 20), 100);
-        $attributeFilters = $request->except(['query', 'per_page', 'page']);
-        try {
-            $withRelations = [
-                'category:id,title,slug',
-                'firstSortedImage:id,product_id,image_path',
-                'images:id,product_id,image_path,sort_order',
-                'inventories' => function ($q) {
-                    $q->select('id', 'product_id', 'mrp', 'offer_rate', 'purchase_rate', 'sku')
-                        ->orderBy('mrp', 'asc');
-                },
-                'productAttributesValues.attributeValue:id,slug'
-            ];
-            /* ---------- Step 1: fast SQL search, attribute-safe ---------- */
-            $productsQuery = Product::where(function ($q) use ($searchTerms, $booleanQuery) {
-                $q->whereRaw("MATCH(title) AGAINST(? IN BOOLEAN MODE)", [$booleanQuery])
-                    ->orWhere(function ($q2) use ($searchTerms) {
-                        foreach ($searchTerms as $term) {
-                            $q2->where('title', 'like', '%' . $term . '%');
-                        }
-                    });
-            });
+		$searchTerms = preg_split('/\s+/', $query);
+		$booleanQuery = '+' . implode(' +', $searchTerms);
+		$perPage = min((int) $request->input('per_page', 20), 100);
+		$attributeFilters = $request->except(['query', 'per_page', 'page', 'filter', 'sort']);
 
-            $this->applySearchAttributeFilters($productsQuery, $attributeFilters);
-            $productsQuery->with($withRelations)
-                ->select('id', 'title', 'slug', 'category_id');
-            $totalFastMatches = (clone $productsQuery)->count();
+		try {
+			$withRelations = [
+				'category:id,title,slug',
+				'firstSortedImage:id,product_id,image_path',
+				'images:id,product_id,image_path,sort_order',
+				'inventories' => function ($q) {
+					$q->select('id', 'product_id', 'mrp', 'offer_rate', 'purchase_rate', 'sku')
+						->orderBy('mrp', 'asc');
+				},
+				'productAttributesValues.attributeValue:id,slug'
+			];
 
-            /* ---------- Step 2: typo fallback, only if fast search found nothing ---------- */
-            if ($totalFastMatches === 0) {
-                $lookup = Cache::remember('search_lookup_products', now()->addHours(6), function () {
-                    return Product::where('product_status', 1)->get(['id', 'title', 'category_id']);
-                });
-                $attributeFilteredIds = null;
-                if (!empty($attributeFilters)) {
-                    $attrIdQuery = Product::query();
-                    $this->applySearchAttributeFilters($attrIdQuery, $attributeFilters);
-                    $attributeFilteredIds = $attrIdQuery->pluck('id')->all();
-                }
+			/* ---------- Step 1: fast SQL search, attribute-safe ---------- */
+			$productsQuery = Product::where(function ($q) use ($searchTerms, $booleanQuery) {
+					$q->whereRaw("MATCH(products.title) AGAINST(? IN BOOLEAN MODE)", [$booleanQuery])
+					->orWhere(function ($q2) use ($searchTerms) {
+						foreach ($searchTerms as $term) {
+							$q2->where('products.title', 'like', '%' . $term . '%');
+						}
+					});
+				});
 
-                $matchedIds = $lookup
-                    ->filter(function ($p) use ($searchTerms, $attributeFilteredIds) {
-                        if ($attributeFilteredIds !== null && !in_array($p->id, $attributeFilteredIds)) {
-                            return false;
-                        }
-                        return $this->textMatchesTerms($p->title, $searchTerms);
-                    })
-                    ->pluck('id');
+			$this->applySearchAttributeFilters($productsQuery, $attributeFilters);
 
-                $productsQuery = Product::whereIn('products.id', $matchedIds)
-                    ->with($withRelations)
-                    ->select('id', 'title', 'slug', 'category_id');
-            }
-            $matchingProductIds = (clone $productsQuery)->pluck('id');
-            $productFilters = $this->getSearchFilterList($matchingProductIds);
-            $product = $productsQuery->paginate($perPage)->appends($request->query());
-            $product->getCollection()->transform(function ($product) {
-                $inventory = $product->inventories->first();
-                $attribute_slug = optional(
-                    optional($product->productAttributesValues->first())->attributeValue
-                )->slug;
-                return [
-                    'id' => $product->id,
-                    'title' => $product->title,
-                    'slug' => $product->slug,
-                    'mrp' => $inventory->mrp ?? null,
-                    'offer_rate' => $inventory->offer_rate ?? null,
-                    'sku' => $inventory->sku ?? null,
-                    'attribute_value_slug' => $attribute_slug,
-                    'category' => [
-                        'title' => optional($product->category)->title,
-                        'slug' => optional($product->category)->slug,
-                    ],
-                    'image' => $product->firstSortedImage
-                        ? $product->firstSortedImage->getSmallImages()
-                        : null,
-                ];
-            });
-            $pagination = [
-                'current_page' => $product->currentPage(),
-                'total_pages' => $product->lastPage(),
-                'per_page' => $product->perPage(),
-                'total_products' => $product->total(),
-                'next_page_url' => $product->nextPageUrl(),
-                'previous_page_url' => $product->previousPageUrl(),
-                'has_next_page' => $product->hasMorePages(),
-                'has_previous_page' => $product->currentPage() > 1
-            ];
+			$totalFastMatches = (clone $productsQuery)->count();
 
-            /* ---------- Categories: fast SQL first, fuzzy fallback if none ---------- */
-            $categoriesResult = Category::where(function ($q) use ($searchTerms) {
-                foreach ($searchTerms as $term) {
-                    $q->orWhere('title', 'like', '%' . $term . '%');
-                }
-            })
-                ->limit(10)
-                ->get(['id', 'title', 'slug']);
+			/* ---------- Step 2: typo fallback, only if fast search found nothing ---------- */
+			if ($totalFastMatches === 0) {
+				$lookup = Cache::remember('search_lookup_products', now()->addHours(6), function () {
+					return Product::where('product_status', 1)->get(['id', 'title', 'category_id']);
+				});
 
-            if ($categoriesResult->isEmpty()) {
-                $categoryLookup = Cache::remember('search_lookup_categories', now()->addHours(6), function () {
-                    return Category::get(['id', 'title', 'slug']);
-                });
+				$attributeFilteredIds = null;
+				if (!empty($attributeFilters)) {
+					$attrIdQuery = Product::query();
+					$this->applySearchAttributeFilters($attrIdQuery, $attributeFilters);
+					$attributeFilteredIds = $attrIdQuery->pluck('id')->all();
+				}
 
-                $matchedCategoryIds = $categoryLookup
-                    ->filter(fn($c) => $this->textMatchesTerms($c->title, $searchTerms))
-                    ->pluck('id')
-                    ->take(10);
+				$matchedIds = $lookup
+					->filter(function ($p) use ($searchTerms, $attributeFilteredIds) {
+						if ($attributeFilteredIds !== null && !in_array($p->id, $attributeFilteredIds)) {
+							return false;
+						}
+						return $this->textMatchesTerms($p->title, $searchTerms);
+					})
+					->pluck('id');
 
-                $categoriesResult = Category::whereIn('id', $matchedCategoryIds)->get(['id', 'title', 'slug']);
-            }
+				$productsQuery = Product::whereIn('products.id', $matchedIds);
+			}
+			$matchingProductIds = (clone $productsQuery)->pluck('id');
+			$productFilters = $this->getSearchFilterList($matchingProductIds);
+			$this->applySearchSort($request, $productsQuery);
 
-            $siteName = config('app.name');
-            $meta = [
-                'title' => ucwords($query) . ' | ' . $siteName,
-                'description' => 'Buy ' . $query . ' online from ' . $siteName .
-                    '. Explore wide range of premium quality products at best price.',
-                'keywords' => $siteName . ', ' . $query . ', buy ' . $query . ', ' . $query . ' online'
-            ];
+			$productsQuery->with($withRelations)
+				->select('products.id', 'products.title', 'products.slug', 'products.category_id');
 
-            return response()->json([
-                'meta' => $meta,
-                'products' => $product->items(),
-                'pagination' => $pagination,
-                'categories' => $categoriesResult,
-                'product_filters' => $productFilters,
-                'query' => $query,
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('Search error: ' . $e->getMessage(), [
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-            return response()->json([
-                'products' => [],
-                'categories' => [],
-                'product_filters' => [],
-                'query' => $query,
-            ], 500);
-        }
-    }
+			$product = $productsQuery->paginate($perPage)->appends($request->query());
 
-    
-    private function applySearchAttributeFilters($productsQuery, array $filters)
-    {
-        foreach ($filters as $attributeSlug => $valueSlugs) {
-            if (is_string($valueSlugs)) {
-                $valueSlugs = explode(',', $valueSlugs);
-            }
-            foreach ($valueSlugs as $singleSlug) {
-                $productsQuery->whereHas('productAttributesValues', function ($q) use ($attributeSlug, $singleSlug) {
-                    $q->whereHas('attributeValue', function ($q2) use ($attributeSlug, $singleSlug) {
-                        $q2->where('slug', $singleSlug)
-                            ->whereHas('attribute', function ($q3) use ($attributeSlug) {
-                                $q3->where('slug', $attributeSlug);
-                            });
-                    });
-                });
-            }
-        }
-    }
+			$product->getCollection()->transform(function ($product) {
+				$inventory = $product->inventories->first();
+				$attribute_slug = optional(
+					optional($product->productAttributesValues->first())->attributeValue
+				)->slug;
 
-    
-    private function getSearchFilterList($productIds)
-    {
-        if (empty($productIds) || (is_countable($productIds) && count($productIds) === 0)) {
-            return [];
-        }
+				return [
+					'id' => $product->id,
+					'title' => $product->title,
+					'slug' => $product->slug,
+					'mrp' => $inventory->mrp ?? null,
+					'offer_rate' => $inventory->offer_rate ?? null,
+					'sku' => $inventory->sku ?? null,
+					'attribute_value_slug' => $attribute_slug,
+					'category' => [
+						'title' => optional($product->category)->title,
+						'slug' => optional($product->category)->slug,
+					],
+					'image' => $product->firstSortedImage
+						? $product->firstSortedImage->getSmallImages()
+						: null,
+				];
+			});
 
-        return Attribute::select('id', 'title', 'slug')
-            ->whereHas('AttributesValues.productAttributesValues.product', function ($q) use ($productIds) {
-                $q->whereIn('id', $productIds);
-            })
-            ->with(['AttributesValues' => function ($query) use ($productIds) {
-                $query->select('id', 'attributes_id', 'name', 'slug')
-                    ->withCount(['productAttributesValues' => function ($q) use ($productIds) {
-                        $q->whereHas('product', function ($q2) use ($productIds) {
-                            $q2->whereIn('id', $productIds);
-                        });
-                    }])
-                    ->having('product_attributes_values_count', '>', 0)
-                    ->orderBy('name');
-            }])
-            ->orderBy('title')
-            ->get()
-            ->filter(fn($attribute) => $attribute->AttributesValues->isNotEmpty())
-            ->map(fn($attribute) => [
-                'id' => $attribute->id,
-                'title' => $attribute->title,
-                'slug' => $attribute->slug,
-                'values' => $attribute->AttributesValues->map(fn($value) => [
-                    'id' => $value->id,
-                    'name' => $value->name,
-                    'slug' => $value->slug
-                ])
-            ])
-            ->values();
-    }
+			$pagination = [
+				'current_page' => $product->currentPage(),
+				'total_pages' => $product->lastPage(),
+				'per_page' => $product->perPage(),
+				'total_products' => $product->total(),
+				'next_page_url' => $product->nextPageUrl(),
+				'previous_page_url' => $product->previousPageUrl(),
+				'has_next_page' => $product->hasMorePages(),
+				'has_previous_page' => $product->currentPage() > 1
+			];
+
+			/* ---------- Categories: fast SQL first, fuzzy fallback if none ---------- */
+			$categoriesResult = Category::where(function ($q) use ($searchTerms) {
+					foreach ($searchTerms as $term) {
+						$q->orWhere('title', 'like', '%' . $term . '%');
+					}
+				})
+				->limit(10)
+				->get(['id', 'title', 'slug']);
+
+			if ($categoriesResult->isEmpty()) {
+				$categoryLookup = Cache::remember('search_lookup_categories', now()->addHours(6), function () {
+					return Category::get(['id', 'title', 'slug']);
+				});
+
+				$matchedCategoryIds = $categoryLookup
+					->filter(fn ($c) => $this->textMatchesTerms($c->title, $searchTerms))
+					->pluck('id')
+					->take(10);
+
+				$categoriesResult = Category::whereIn('id', $matchedCategoryIds)->get(['id', 'title', 'slug']);
+			}
+
+			$siteName = config('app.name');
+			$meta = [
+				'title' => ucwords($query) . ' | ' . $siteName,
+				'description' => 'Buy ' . $query . ' online from ' . $siteName .
+					'. Explore wide range of premium quality products at best price.',
+				'keywords' => $siteName . ', ' . $query . ', buy ' . $query . ', ' . $query . ' online'
+			];
+
+			return response()->json([
+				'meta' => $meta,
+				'products' => $product->items(),
+				'pagination' => $pagination,
+				'categories' => $categoriesResult,
+				'product_filters' => $productFilters,
+				'query' => $query,
+			]);
+
+		} catch (\Throwable $e) {
+			Log::error('Search error: ' . $e->getMessage(), [
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+				'trace' => $e->getTraceAsString(),
+			]);
+			return response()->json([
+				'products' => [],
+				'categories' => [],
+				'product_filters' => [],
+				'query' => $query,
+			], 500);
+		}
+	}
+	private function applySearchAttributeFilters($productsQuery, array $filters)
+	{
+		foreach ($filters as $attributeSlug => $valueSlugs) {
+			if (is_string($valueSlugs)) {
+				$valueSlugs = explode(',', $valueSlugs);
+			}
+			foreach ($valueSlugs as $singleSlug) {
+				$productsQuery->whereHas('productAttributesValues', function ($q) use ($attributeSlug, $singleSlug) {
+					$q->whereHas('attributeValue', function ($q2) use ($attributeSlug, $singleSlug) {
+						$q2->where('slug', $singleSlug)
+							->whereHas('attribute', function ($q3) use ($attributeSlug) {
+								$q3->where('slug', $attributeSlug);
+							});
+					});
+				});
+			}
+		}
+	}
+	
+	private function applySearchSort(Request $request, $productsQuery)
+	{
+		$sortOption = $request->get('sort');
+
+		switch ($sortOption) {
+			case 'price-low-to-high':
+				$productsQuery->leftJoin('inventories', function ($join) {
+					$join->on('products.id', '=', 'inventories.product_id')
+						->whereRaw('inventories.mrp = (SELECT MIN(mrp) FROM inventories WHERE product_id = products.id)');
+				})->orderByRaw('ISNULL(inventories.offer_rate), inventories.offer_rate ASC');
+				break;
+			case 'price-high-to-low':
+				$productsQuery->leftJoin('inventories', function ($join) {
+					$join->on('products.id', '=', 'inventories.product_id')
+						->whereRaw('inventories.mrp = (SELECT MIN(mrp) FROM inventories WHERE product_id = products.id)');
+				})->orderByRaw('ISNULL(inventories.offer_rate), inventories.offer_rate DESC');
+				break;
+			case 'a-to-z-order':
+				$productsQuery->orderBy('products.title', 'asc');
+				break;
+			case 'new-arrivals':
+			default:
+				$productsQuery->orderBy('products.created_at', 'desc');
+				break;
+		}
+	}
+	
+	private function getSearchFilterList($productIds)
+	{
+		if (empty($productIds) || (is_countable($productIds) && count($productIds) === 0)) {
+			return [];
+		}
+
+		return Attribute::select('id', 'title', 'slug')
+			->whereHas('AttributesValues.productAttributesValues.product', function ($q) use ($productIds) {
+				$q->whereIn('id', $productIds);
+			})
+			->with(['AttributesValues' => function ($query) use ($productIds) {
+				$query->select('id', 'attributes_id', 'name', 'slug')
+					->withCount(['productAttributesValues' => function ($q) use ($productIds) {
+						$q->whereHas('product', function ($q2) use ($productIds) {
+							$q2->whereIn('id', $productIds);
+						});
+					}])
+					->having('product_attributes_values_count', '>', 0)
+					->orderBy('name');
+			}])
+			->orderBy('title')
+			->get()
+			->filter(fn($attribute) => $attribute->AttributesValues->isNotEmpty())
+			->map(fn($attribute) => [
+				'id' => $attribute->id,
+				'title' => $attribute->title,
+				'slug' => $attribute->slug,
+				'values' => $attribute->AttributesValues->map(fn($value) => [
+					'id' => $value->id,
+					'name' => $value->name,
+					'slug' => $value->slug
+				])
+			])
+			->values();
+	}
 }
