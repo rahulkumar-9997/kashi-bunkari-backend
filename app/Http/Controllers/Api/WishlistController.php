@@ -10,10 +10,7 @@ use Illuminate\Support\Facades\Validator;
 
 class WishlistController extends Controller
 {
-    /**
-     * Add a product to the logged-in customer's wishlist.
-     * If it's already there, this is a no-op (still returns success).
-     */
+    
     public function add(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -47,6 +44,7 @@ class WishlistController extends Controller
         }
     }
 
+   
     public function list(Request $request)
     {
         try {
@@ -60,6 +58,7 @@ class WishlistController extends Controller
         }
     }
 
+    
     public function remove(Request $request, $id)
     {
         $productId = (int) $id;
@@ -67,6 +66,7 @@ class WishlistController extends Controller
 
         try {
             Wishlist::where('customer_id', $customerId)->where('product_id', $productId)->delete();
+
             return response()->json([
                 'success' => true,
                 'message' => 'Product removed from wishlist.',
@@ -77,6 +77,49 @@ class WishlistController extends Controller
         }
     }
 
+    
+    public function toggle(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'product_id' => 'required|integer|exists:products,id',
+        ]);
+        if ($validator->fails()) {
+            return $this->invalidRequestResponse($validator->errors()->first());
+        }
+
+        $productId = (int) $request->input('product_id');
+        $customerId = $request->user()->id;
+
+        try {
+            $existing = Wishlist::where('customer_id', $customerId)->where('product_id', $productId)->first();
+
+            if ($existing) {
+                $existing->delete();
+                $wishlisted = false;
+                $message = 'Product removed from wishlist.';
+            } else {
+                $product = Product::where('id', $productId)->where('product_status', 1)->first();
+                if (!$product) {
+                    return $this->notFoundResponse('Product not found or is unavailable.');
+                }
+                Wishlist::create(['customer_id' => $customerId, 'product_id' => $productId]);
+                $wishlisted = true;
+                $message = 'Product added to wishlist.';
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'data' => array_merge(
+                    ['wishlisted' => $wishlisted],
+                    $this->buildWishlistResponse($customerId),
+                ),
+            ]);
+        } catch (\Throwable $e) {
+            return $this->serverErrorResponse($e, 'Could not update your wishlist.');
+        }
+    }
+    
     private function buildWishlistResponse(int $customerId): array
     {
         $items = Wishlist::where('customer_id', $customerId)
@@ -84,12 +127,16 @@ class WishlistController extends Controller
                 'product:id,title,slug,category_id,product_status',
                 'product.category:id,title,slug',
                 'product.firstSortedImage:id,product_id,image_path',
-                'product.inventories:id,product_id,mrp,offer_rate,stock_quantity',
+                'product.inventories' => function ($query) {
+                    $query->select('id', 'product_id', 'mrp', 'offer_rate', 'purchase_rate', 'sku', 'stock_quantity')
+                        ->orderBy('mrp', 'asc');
+                },
+                'product.productAttributesValues.attributeValue:id,slug',
             ])
             ->latest()
             ->get()
             ->map(fn($wishlistItem) => $this->formatWishlistItem($wishlistItem->product))
-            ->filter()
+            ->filter() // drop any items whose product vanished or was deactivated
             ->values();
 
         return [
@@ -103,25 +150,29 @@ class WishlistController extends Controller
         if (!$product || $product->product_status != 1) {
             return null;
         }
-        $inventory = $product->inventories?->sortBy('mrp')->first();
+
+        $inventory = $product->inventories->first();
+        $attributeSlug = optional(
+            optional($product->productAttributesValues->first())->attributeValue
+        )->slug;
 
         return [
-            'product_id' => $product->id,
+            'id' => $product->id,
             'title' => $product->title,
             'slug' => $product->slug,
+            'mrp' => $inventory->mrp ?? null,
+            'offer_rate' => $inventory->offer_rate ?? null,
+            'sku' => $inventory->sku ?? null,
+            'attribute_value' => $attributeSlug,
             'category' => [
-                'title' => optional($product->category)->title,
-                'slug' => optional($product->category)->slug,
+                'title' => $product->category->title ?? null,
+                'slug'  => $product->category->slug ?? null,
             ],
-            'image' => $product->firstSortedImage
-                ? $product->firstSortedImage->getSmallImages()
-                : null,
-            'mrp' => $inventory?->mrp,
-            'offer_rate' => $inventory?->offer_rate,
-            'in_stock' => $inventory === null || $inventory->stock_quantity === null || $inventory->stock_quantity > 0,
+            'image' => $product->firstSortedImage ? $product->firstSortedImage->getSmallImages() : null,
+            'in_stock' => $inventory === null || ($inventory->stock_quantity ?? null) === null || $inventory->stock_quantity > 0,
         ];
     }
-
+	
     private function notFoundResponse(string $message)
     {
         return response()->json(['success' => false, 'error_code' => 'NOT_FOUND', 'message' => $message], 404);

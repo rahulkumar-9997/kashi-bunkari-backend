@@ -15,6 +15,8 @@ use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\ProductEnquiryController;
 use App\Http\Controllers\Api\WishlistController;
+use App\Http\Controllers\Api\PaymentController;
+
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
@@ -65,17 +67,26 @@ Route::prefix('customer')->group(function () {
             Route::get('/profile', 'profile');
             Route::post('/update-profile', 'updateProfile');
             Route::post('/logout', 'logout');
-        });
-        Route::controller(WishlistController::class)->group(function () {
-            Route::post('/wishlist/add', 'add');
-            Route::get('/wishlist/list', 'list');
-            Route::delete('/wishlist/{id}', 'remove');
-        });        
+        });               
     });
     
 });
+Route::middleware(['auth:sanctum'])->group(function () {
+	Route::controller(WishlistController::class)->group(function () {
+		Route::post('/wishlist/add', 'add');
+		Route::get('/wishlist/list', 'list');
+		Route::delete('/wishlist/{id}', 'remove');
+	}); 
+});
 
-
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::post('/create-order', [PaymentController::class, 'createOrder']);
+    Route::post('/verify', [PaymentController::class, 'verifyPayment']);
+});
+Route::prefix('payment')->group(function () {
+    Route::get('/promotions', [PaymentController::class, 'getPromotions']);
+    Route::post('/shipping-info', [PaymentController::class, 'getShippingInfo']);
+});
 Route::prefix('cart')->middleware(['cart.optional-auth'])->group(function () {
     Route::post('/add', [CartController::class, 'addToCart']); 
     Route::get('/list', [CartController::class, 'cartList']); 
