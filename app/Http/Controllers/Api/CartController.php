@@ -199,8 +199,7 @@ class CartController extends Controller
                 }
             }
         });
-        $this->clearGuestCart($request);
-		Log::info('ADD DEBUG - token: ' . $request->header('X-Cart-Token') . ' | product: ' . $productId);
+        $this->clearGuestCart($request);		
     }
 
     /* =========================================================================
@@ -233,18 +232,7 @@ class CartController extends Controller
         }
         $this->saveGuestCart(request(), $cart);
     }
-
-    /* =========================================================================
-     |  GUEST CART STORAGE — X-Cart-Token (Cache) with session() fallback
-     |
-     |  Cross-origin PHP session cookies are unreliable across different
-     |  domains (e.g. Vercel frontend + this API on its own domain) — the
-     |  frontend sends a stable "X-Cart-Token" header (generated once,
-     |  stored in localStorage) on every cart request. When present, we
-     |  use it as a Cache key instead of the session — completely
-     |  sidestepping cookie issues. If the header is absent, we fall back
-     |  to the previous session-based behavior so nothing breaks.
-     * ========================================================================= */
+    
     private function guestCartToken(Request $request): ?string
     {
         $token = $request->header('X-Cart-Token');
@@ -285,10 +273,6 @@ class CartController extends Controller
         session()->forget(self::SESSION_KEY);
     }
 
-    /**
-     * "inventory cart check min mrp from product id" — always the cheapest
-     * inventory row for a given product.
-     */
     private function resolveCheapestInventory(int $productId): ?Inventory
     {
         return Inventory::where('product_id', $productId)
@@ -314,7 +298,7 @@ class CartController extends Controller
                     $item->product,
                     $item->inventory
                 ))
-                ->filter() // drop any items whose product/inventory vanished
+                ->filter() 
                 ->values();
         } else {
             $sessionCart = $this->getGuestCart($request);
@@ -376,10 +360,7 @@ class CartController extends Controller
             'line_total' => $lineTotal,
         ];
     }
-
-    /* =========================================================================
-     |  STANDARDIZED ERROR RESPONSES
-     * ========================================================================= */
+    
     private function notFoundResponse(string $message)
     {
         return response()->json(['success' => false, 'error_code' => 'NOT_FOUND', 'message' => $message], 404);
