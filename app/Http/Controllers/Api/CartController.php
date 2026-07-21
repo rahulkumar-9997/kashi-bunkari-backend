@@ -46,6 +46,18 @@ class CartController extends Controller
         }
         try {
             $user = $request->user();
+			$existingQty = $user
+			? (int) (Cart::where('customer_id', $user->id)->where('product_id', $productId)->value('quantity') ?? 0)
+			: (int) ($this->getGuestCart($request)[$productId]['quantity'] ?? 0);
+			$newTotalQty = $existingQty + $quantity;
+			if ($inventory->stock_quantity !== null && $newTotalQty > $inventory->stock_quantity) {
+				$available = max($inventory->stock_quantity - $existingQty, 0);
+				return $this->invalidRequestResponse(
+					$available > 0
+						? "Only {$available} more unit(s) can be added — stock limit reached."
+						: 'No more units of this product can be added — stock limit reached.'
+				);
+			}
             if ($user) {
                 $this->addToDbCart($user->id, $productId, $inventory->id, $quantity);
             } else {
@@ -276,8 +288,11 @@ class CartController extends Controller
     private function resolveCheapestInventory(int $productId): ?Inventory
     {
         return Inventory::where('product_id', $productId)
-            ->orderBy('mrp', 'asc')
-            ->first();
+        ->where(function ($q) {
+            $q->whereNull('stock_quantity')->orWhere('stock_quantity', '>', 0);
+        })
+        ->orderBy('mrp', 'asc')
+        ->first();
     }
 
     private function buildCartResponse(Request $request): array

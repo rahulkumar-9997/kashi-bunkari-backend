@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\ProductEnquiryController;
+use App\Http\Controllers\Api\WishlistController;
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
@@ -64,6 +65,11 @@ Route::prefix('customer')->group(function () {
             Route::get('/profile', 'profile');
             Route::post('/update-profile', 'updateProfile');
             Route::post('/logout', 'logout');
+        });
+        Route::controller(WishlistController::class)->group(function () {
+            Route::post('/wishlist/add', 'add');
+            Route::get('/wishlist/list', 'list');
+            Route::delete('/wishlist/{id}', 'remove');
         });        
     });
     
