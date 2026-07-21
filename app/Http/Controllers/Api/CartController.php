@@ -165,6 +165,7 @@ class CartController extends Controller
     public function mergeSessionCartIntoUser(Request $request, int $userId): void
     {
         $sessionCart = $this->getGuestCart($request);
+		Log::info('MERGE DEBUG - token: ' . $request->header('X-Cart-Token') . ' | cart: ' . json_encode($sessionCart));
         if (empty($sessionCart)) {
             return;
         }
@@ -199,6 +200,7 @@ class CartController extends Controller
             }
         });
         $this->clearGuestCart($request);
+		Log::info('ADD DEBUG - token: ' . $request->header('X-Cart-Token') . ' | product: ' . $productId);
     }
 
     /* =========================================================================

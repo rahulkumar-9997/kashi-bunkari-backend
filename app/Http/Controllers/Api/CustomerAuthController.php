@@ -11,6 +11,7 @@ use App\Models\Cart;
 use App\Services\CartService;
 use Google\Client;
 use App\Mail\SendOtpMail;
+use App\Http\Controllers\Api\CartController;
 use Illuminate\Support\Facades\Mail;
 
 
@@ -217,20 +218,20 @@ class CustomerAuthController extends Controller
             'user_agent' => substr((string) request()->userAgent(), 0, 255),
             'ip_address' => request()->ip(),
         ])->save();
-
         /*
             CART MERGE LOGIC
         */
-        /* $sessionId = $request->cookie('cart_session_id');
-
-        if (app()->environment('local')) {
-            Log::info("Cart merge for customer", ['session_id' => $sessionId]);
+		Log::info('Before merge cart');
+        try {
+            app(CartController::class)->mergeSessionCartIntoUser($request, $customer->id);
+			 Log::info('After merge cart');
+        } catch (\Throwable $e) {
+            Log::error('Cart merge failed: '.$e->getMessage());
+			Log::error($e->getTraceAsString());
         }
-
-        if (class_exists(CartService::class) && method_exists(CartService::class, 'mergeCartAfterLogin')) {
-            CartService::mergeCartAfterLogin($customer->id, $sessionId);
-        }
-         */   
+        /*
+            CART MERGE LOGIC
+        */
 
         return response()->json([
             'success' => true,
