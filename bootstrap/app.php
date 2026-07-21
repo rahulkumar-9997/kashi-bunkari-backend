@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use App\Http\Middleware\TryAuthenticateSanctum; 
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Illuminate\Auth\AuthenticationException;
@@ -19,12 +20,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'check.device' => \App\Http\Middleware\CheckDevice::class,
+            'cart.optional-auth' => TryAuthenticateSanctum::class,
         ]);
         $middleware->prepend(HandleCors::class); 
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-
-        // Handle Authentication
         $exceptions->render(function (AuthenticationException $e, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json([
@@ -34,8 +34,6 @@ return Application::configure(basePath: dirname(__DIR__))
                 ], 401);
             }
         });
-
-        // Handle Method Not Allowed - UPDATED to check api/* routes
         $exceptions->render(function (MethodNotAllowedHttpException $e, Request $request) {
             // Check if it's an API route OR expects JSON
             if ($request->is('api/*') || $request->expectsJson()) {
@@ -48,8 +46,6 @@ return Application::configure(basePath: dirname(__DIR__))
                 ], 405);
             }
         });
-
-        // Handle Not Found - UPDATED to check api/* routes
         $exceptions->render(function (NotFoundHttpException $e, Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {
                 return response()->json([
@@ -59,8 +55,6 @@ return Application::configure(basePath: dirname(__DIR__))
                 ], 404);
             }
         });
-
-        // Optional: Handle all other exceptions for API
         $exceptions->render(function (\Throwable $e, Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {
                 return response()->json([

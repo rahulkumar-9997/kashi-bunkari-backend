@@ -70,7 +70,7 @@ Route::prefix('customer')->group(function () {
 });
 
 
-Route::prefix('cart')->group(function () {
+Route::prefix('cart')->middleware(['cart.optional-auth'])->group(function () {
     Route::post('/add', [CartController::class, 'addToCart']); 
     Route::get('/list', [CartController::class, 'cartList']); 
     Route::put('/{id}', [CartController::class, 'updateCartItem']); 

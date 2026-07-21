@@ -16,7 +16,6 @@ class CartController extends Controller
 {
 
     private const SESSION_KEY = 'cart';
-
     /**
      * How long a guest cart survives with no activity, when identified
      * via X-Cart-Token (Cache-backed) rather than the PHP session.
@@ -88,7 +87,7 @@ class CartController extends Controller
         try {
             $user = $request->user();
             if ($user) {
-                $cartItem = Cart::where('user_id', $user->id)->where('product_id', $productId)->first();
+                $cartItem = Cart::where('customer_id', $user->id)->where('product_id', $productId)->first();
                 if (!$cartItem) {
                     return $this->notFoundResponse('This product is not in your cart.');
                 }
@@ -128,7 +127,7 @@ class CartController extends Controller
         try {
             $user = $request->user();
             if ($user) {
-                Cart::where('user_id', $user->id)->where('product_id', $productId)->delete();
+                Cart::where('customer_id', $user->id)->where('product_id', $productId)->delete();
             } else {
                 $cart = $this->getGuestCart($request);
                 unset($cart[$productId]);
@@ -149,7 +148,7 @@ class CartController extends Controller
         try {
             $user = $request->user();
             if ($user) {
-                Cart::where('user_id', $user->id)->delete();
+                Cart::where('customer_id', $user->id)->delete();
             } else {
                 $this->clearGuestCart($request);
             }
@@ -180,7 +179,7 @@ class CartController extends Controller
                     continue;
                 }
                 $inventory = $this->resolveCheapestInventory($productId);
-                $existing = Cart::where('user_id', $userId)->where('product_id', $productId)->first();
+                $existing = Cart::where('customer_id', $userId)->where('product_id', $productId)->first();
                 if ($existing) {
                     $existing->quantity += $quantity;
                     if ($inventory && $inventory->stock_quantity !== null) {
@@ -189,7 +188,7 @@ class CartController extends Controller
                     $existing->save();
                 } else {
                     Cart::create([
-                        'user_id' => $userId,
+                        'customer_id' => $userId,
                         'product_id' => $productId,
                         'inventory_id' => $inventory?->id,
                         'quantity' => $inventory && $inventory->stock_quantity !== null
@@ -210,11 +209,11 @@ class CartController extends Controller
         $cartItem = Cart::where('customer_id', $userId)->where('product_id', $productId)->first();
         if ($cartItem) {
             $cartItem->quantity += $quantity;
-            $cartItem->inventory_id = $inventoryId;
+            $cartItem->inventory_id = $inventoryId; // keep pointing at the current cheapest inventory
             $cartItem->save();
         } else {
             Cart::create([
-                'user_id' => $userId,
+                'customer_id' => $userId,
                 'product_id' => $productId,
                 'inventory_id' => $inventoryId,
                 'quantity' => $quantity,
@@ -299,7 +298,7 @@ class CartController extends Controller
     {
         $user = $request->user();
         if ($user) {
-            $items = Cart::where('user_id', $user->id)
+            $items = Cart::where('customer_id', $user->id)
                 ->with([
                     'product:id,title,slug,category_id',
                     'product.category:id,title,slug',
@@ -313,7 +312,7 @@ class CartController extends Controller
                     $item->product,
                     $item->inventory
                 ))
-                ->filter()
+                ->filter() // drop any items whose product/inventory vanished
                 ->values();
         } else {
             $sessionCart = $this->getGuestCart($request);
