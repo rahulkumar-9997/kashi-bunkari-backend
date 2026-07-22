@@ -79,7 +79,7 @@ class OrderControllerBackend extends Controller
         ])->findOrFail($id);
 
         $orders_status = OrderStatus::orderBy('status_name')->get();
-        return view('backend.manage-order.edit-order', compact('order','orders_status'));
+        return view('backend.pages.manage-order.edit-order', compact('order','orders_status'));
     }
 
 
@@ -94,7 +94,7 @@ class OrderControllerBackend extends Controller
         ->where('id', $id)
         ->first();
         //return response()->json($orders);
-        return view('backend.manage-order.order-details', compact('order'));
+        return view('backend.pages.manage-order.order-details', compact('order'));
     }
 
     public function updateOrderStatus(Request $request, $orderId)

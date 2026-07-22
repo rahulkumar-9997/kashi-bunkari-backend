@@ -343,7 +343,7 @@ class CheckoutController extends Controller
             'shipping_amount' => 0,
             'grand_total' => $subtotal,
             'payment_mode' => $paymentMode,
-            'payment_received' => $paymentReceived,
+            'payment_received' => $paymentMode === 'cod' ? false : $paymentReceived,
             'customer_id' => $customer->id,
             'order_address_id' => $orderAddress->id,
             'order_status_id' => $pendingStatus?->id,

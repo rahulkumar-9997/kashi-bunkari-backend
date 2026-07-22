@@ -33,7 +33,7 @@
                 </span> -->
             </td>
             <td>
-                Rs. {{ number_format($order->grand_total_amount, 2) }}
+                Rs. {{ number_format($order->grand_total, 2) }}
                 @if(!empty($order->coupon_code) && $order->coupon_discount_amount > 0)
                     <br>
                     <span class="badge bg-info-subtle text-info border border-info mt-1">
@@ -41,20 +41,7 @@
                         ( - Rs. {{ number_format($order->coupon_discount_amount, 2) }} )
                     </span>
                 @endif
-                @if($order->shiprocketCourier)
-                <label class="ms-2 fs-20 text-success cursor-pointer"
-                    data-bs-toggle="tooltip"
-                    data-bs-placement="top"
-                    data-bs-html="true"
-                    title="
-                        Shiprocket Courier: <strong>{{ $order->shiprocketCourier->courier_name }}</strong><br>
-                        Rate: <strong>Rs. {{ $order->shiprocketCourier->courier_shipping_rate }}</strong><br>
-                        Delivery Expected: <strong>{{ $order->shiprocketCourier->delivery_expected_date }}</strong>
-                    ">
-                    
-                    <i class="ti ti-question-mark"></i>
-                </label>
-            @endif
+                
             </td>
             <td>
                 <span class="badge border border-success text-success">{{ $order->payment_mode }}</span>
@@ -67,7 +54,7 @@
                 @endif
 
             </td>
-            <td>{{ $order->orderLines->count() }}</td>
+            <td>{{ $order->orderLine->count() }}</td>
             <td>
                 @if (isset($orders_status) && $orders_status->count() > 0)
                     <select class="form-control"
@@ -80,7 +67,7 @@
                         <option
                             value="{{ $order_status->id }}"
                             {{ $order->order_status_id == $order_status->id ? 'selected' : '' }}>
-                            {{ $order_status->status_name }}
+                            {{ $order_status->name }}
                         </option>
                         @endforeach
                     </select>
@@ -91,118 +78,7 @@
                 $sr = $order->shiprocketOrderResponse;
             @endphp
             <td>
-                <div class="d-flex gap-2">
-                    @if($order->shiprocketCourier)
-                        @if($order->payment_mode !== 'Pick Up From Store')
-
-                        <style>
-                            .disabled-dropdown {
-                                pointer-events: none !important;
-                                opacity: 0.6;
-                            }
-                        </style>
-
-                        <div class="dropdown">
-                            <a href="#" class="dropdown-toggle btn btn-sm btn-outline-primary" data-bs-toggle="dropdown">
-                                Shiprocket Actions
-                            </a>
-                            <div class="dropdown-menu dropdown-menu-end">
-
-                                {{-- ================================================== --}}
-                                {{-- IF ORDER CANCELLED → SHOW ONLY CANCEL STATUS       --}}
-                                {{-- ================================================== --}}
-                                @if($sr && $sr->is_order_cancelled)
-                                    <span class="dropdown-item disabled-dropdown text-danger fw-bold">
-                                        ✘ Order Cancelled
-                                    </span>
-                                @else
-
-                                    {{-- ========================= --}}
-                                    {{-- CREATE ORDER BUTTON       --}}
-                                    {{-- ========================= --}}
-                                    @if(!$sr || !$sr->is_order_created)
-                                        <a href="javascript:void(0)" 
-                                            class="dropdown-item sr-action"
-                                            data-url="{{ route('shiprocket.create.order', $order->id) }}"
-                                            data-order-status-id="{{ $order_status_id }}"
-                                            data-action-text="Create Order">
-                                            Create Order
-                                        </a>
-                                    @else
-                                        <span class="dropdown-item disabled-dropdown text-success fw-bold">
-                                            ✔ Order Created
-                                        </span>
-
-                                        {{-- PICKUP REQUEST --}}
-                                        @if(!$sr->is_pickup_requested)
-                                            <a href="javascript:void(0)" 
-                                                class="dropdown-item sr-action"
-                                                data-url="{{ route('shiprocket.pickup', $order->id) }}"
-                                                data-order-status-id="{{ $order_status_id }}"
-                                                data-action-text="Pickup Request">
-                                                Request For Pickup
-                                            </a>
-                                        @else
-                                            <span class="dropdown-item disabled-dropdown text-success fw-bold">
-                                                ✔ Requested For Pickup
-                                            </span>
-                                        @endif
-                                    @endif
-
-                                    {{-- ========================= --}}
-                                    {{-- ONLY SHOW THESE IF ORDER CREATED --}}
-                                    {{-- ========================= --}}
-                                    @if($sr && $sr->is_order_created)
-
-                                        {{-- AWB --}}
-                                        @if($sr->is_awb_generated)
-                                            <span class="dropdown-item disabled-dropdown text-success fw-bold">
-                                                ✔ AWB Generated ({{ $sr->shiprocket_awb_code }})
-                                            </span>
-                                        @else
-                                            <a href="javascript:void(0)" 
-                                                class="dropdown-item sr-action"
-                                                data-url="{{ route('shiprocket.generate.awb', $order->id) }}"
-                                                data-order-status-id="{{ $order_status_id }}"
-                                                data-action-text="Generate AWB">
-                                                Generate AWB
-                                            </a>
-                                        @endif
-
-                                        {{-- CANCEL ORDER --}}
-                                        <a href="javascript:void(0)" 
-                                            class="dropdown-item sr-action"
-                                            data-url="{{ route('shiprocket.cancel.order', $order->id) }}"
-                                            data-order-status-id="{{ $order_status_id }}"
-                                            data-action-text="Cancel Order">
-                                            Cancel Order
-                                        </a>
-                                        {{-- UPDATE ADDRESS --}}
-                                        @if($sr->is_address_updated)
-                                            <span class="dropdown-item disabled-dropdown text-success fw-bold">
-                                                ✔ Address Updated
-                                            </span>
-                                        @else
-                                            <a href="javascript:void(0)" 
-                                                class="dropdown-item sr-action"
-                                                data-url="{{ route('shiprocket.update.address', $order->id) }}"
-                                                data-order-status-id="{{ $order_status_id }}"
-                                                data-action-text="Update Address">
-                                                Update Address
-                                            </a>
-                                        @endif
-                                        {{-- PICKUP ALREADY REQUESTED --}}
-                                        @if($sr->is_pickup_requested)
-                                            <span class="dropdown-item disabled-dropdown text-success fw-bold">
-                                                ✔ Pickup Scheduled
-                                            </span>
-                                        @endif
-                                    @endif                                
-                                @endif
-                            </div>
-                        </div>
-                        @endif
-                    @endif
+                <div class="d-flex gap-2">                    
                     <a href="{{ route('download-invoice', ['orderId' => $order->id]) }}" class="btn btn-light btn-sm"
                         data-bs-toggle="tooltip" data-bs-original-title="Print Invoice">
                         <i class="ti ti-file-invoice"></i>

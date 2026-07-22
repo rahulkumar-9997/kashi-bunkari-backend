@@ -53,7 +53,7 @@ class Order extends Model
         return $this->belongsTo(OrderStatus::class, 'order_status_id');
     }
 
-    public function orderLines()
+    public function orderLine()
     {
         return $this->hasMany(OrderLine::class, 'order_id');
     }
