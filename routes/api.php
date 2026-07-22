@@ -14,8 +14,10 @@ use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\AddressController;
 use App\Http\Controllers\Api\StateController;
+
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -99,7 +101,8 @@ Route::middleware(['cart.optional-auth'])->prefix('payment')->group(function () 
     Route::post('/verify', [PaymentController::class, 'verifyPayment']);
 });
 
-Route::prefix('payment')->group(function () {
-    Route::get('/promotions', [PaymentController::class, 'getPromotions']);
-    Route::post('/shipping-info', [PaymentController::class, 'getShippingInfo']);
+
+Route::middleware(['cart.optional-auth'])->prefix('checkout')->group(function () {
+    Route::post('/place-order', [CheckoutController::class, 'placeOrder']);
+    Route::post('/verify-payment', [CheckoutController::class, 'verifyPayment']);
 });
