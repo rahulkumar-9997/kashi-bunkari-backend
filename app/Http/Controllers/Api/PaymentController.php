@@ -96,38 +96,38 @@ class PaymentController extends Controller
         $lineItemTotal = 0;
 
         foreach ($cartItems as $item) {
-            $inventory = $item->inventory;
-            if (!$inventory) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'One of your items is no longer available.',
-                ], 400);
-            }
-            if ($inventory->stock_quantity !== null && $inventory->stock_quantity < $item->quantity) {
-                return response()->json([
-                    'success' => false,
-                    'message' => "Only {$inventory->stock_quantity} unit(s) left for one of your items.",
-                ], 400);
-            }
+			$inventory = $item->inventory;
+			if (!$inventory) {
+				return response()->json([
+					'success' => false,
+					'message' => 'One of your items is no longer available.',
+				], 400);
+			}
+			if ($inventory->stock_quantity !== null && $inventory->stock_quantity < $item->quantity) {
+				return response()->json([
+					'success' => false,
+					'message' => "Only {$inventory->stock_quantity} unit(s) left for one of your items.",
+				], 400);
+			}
 
-            $mrpPaise = (int) round(($inventory->mrp ?? $inventory->offer_rate ?? 0) * 100);
-            $offerPricePaise = (int) round(($inventory->offer_rate ?? $inventory->mrp ?? 0) * 100);
+			$mrpPaise = (int) round(($inventory->mrp ?? $inventory->offer_rate ?? 0) * 100);
+			$offerPricePaise = (int) round(($inventory->offer_rate ?? $inventory->mrp ?? 0) * 100);
 
-            $lineItems[] = [
-                'type' => 'e-commerce',
-                'sku' => $inventory->sku ?? (string) $item->product_id,
-                'price' => $mrpPaise,
-                'offer_price' => $offerPricePaise,
-                'tax_amount' => 0,
-                'quantity' => $item->quantity,
-                'name' => $item->product->title ?? '',
-                'image_url' => $item->product?->firstSortedImage
-                    ? $item->product->firstSortedImage->getSmallImages()
-                    : null,
-            ];
+			$lineItems[] = [
+				'sku' => $inventory->sku ?? (string) $item->product_id,
+				'variant_id' => (string) ($inventory->id ?? $item->product_id), // mandatory
+				'price' => $mrpPaise,
+				'offer_price' => $offerPricePaise,
+				'quantity' => $item->quantity,
+				'name' => $item->product->title ?? '',
+				'description' => $item->product->title ?? '', // mandatory — use title if no separate description
+				'image_url' => $item->product?->firstSortedImage
+					? $item->product->firstSortedImage->getSmallImages()
+					: null,
+			];
 
-            $lineItemTotal += $offerPricePaise * $item->quantity;
-        }
+			$lineItemTotal += $offerPricePaise * $item->quantity;
+		}
 
         try {
             $razorpayOrder = $this->razorpay()->order->create([
@@ -147,7 +147,6 @@ class PaymentController extends Controller
                 // exists in their own docs — please confirm the exact
                 // key with your Razorpay account manager/SPOC (or test
                 // both in Test Mode) before going live.
-                'line_item_total' => $lineItemTotal,
                 'line_items' => $lineItems,
             ]);
 

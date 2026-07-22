@@ -12,13 +12,16 @@ class OrderAddress extends Model
         'type',
         'full_name',
         'phone_number',
+        'alternate_phone',
         'email',
         'country',
         'address',
         'apartment',
         'city',
         'state',
-        'pin_code'
+        'pin_code',
+        'locality',
+        'landmark',
     ];
 
     public function customer()

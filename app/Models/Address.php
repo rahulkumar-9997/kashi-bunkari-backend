@@ -10,12 +10,14 @@ class Address extends Model
         'customer_id',
         'name',
         'phone_number',
-        'country',
+        'zip_code',
+        'locality',
         'address',
-        'apartment',
         'city',
         'state',
-        'zip_code',
+        'landmark',
+        'alternate_phone',
+        'country', 
         'is_default'
     ];
     protected $casts = [
