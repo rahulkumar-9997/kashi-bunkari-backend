@@ -29,13 +29,8 @@ class OrderAddress extends Model
         return $this->belongsTo(Customer::class, 'customer_id');
     }
 
-    public function shippingOrders()
+    public function orders()
     {
-        return $this->hasMany(Order::class, 'shipping_address_id');
-    }
-
-    public function billingOrders()
-    {
-        return $this->hasMany(Order::class, 'billing_address_id');
+        return $this->hasMany(Order::class, 'order_address_id');
     }
 }

@@ -5,12 +5,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderStatus;
-use App\Models\OrderLines;
-use App\Models\ShippingAddress;
-use App\Models\BillingAddress;
+use App\Models\OrderAddress;
+use App\Models\OrderLine;
 use App\Models\OrderShipmentRecords;
-use App\Models\ShiprocketShipmentAwbResponse;
-use App\Models\ShiprocketPickupResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -23,9 +20,8 @@ class OrderControllerBackend extends Controller
             $orderStatusId = 1;
             $orders = Order::with([
                 'orderStatus',
-                'shippingAddress',
-                'billingAddress',
-                'orderLines' => function ($query) {
+                'orderAddress',
+                'OrderLine' => function ($query) {
                     $query->with('product');
                 }
             ])
@@ -35,9 +31,8 @@ class OrderControllerBackend extends Controller
         } elseif ($orderStatusId) {
             $orders = Order::with([
                 'orderStatus',
-                'shippingAddress',
-                'billingAddress',
-                'orderLines' => function ($query) {
+                'orderAddress',
+                'OrderLine' => function ($query) {
                     $query->with('product');
                 }
             ])
@@ -54,36 +49,32 @@ class OrderControllerBackend extends Controller
     }
 
     public function orderDelete($orderId)
-    {
+    {   
         DB::beginTransaction();
         try {
-            $order = Orders::where('id', $orderId)->first();
+            $order = Order::find($orderId);
             if (!$order) {
                 return redirect()->back()->with('error', 'Order not found.');
             }
-            OrderLines::where('order_id', $order->id)->delete();
-            if ($order->shipping_address_id) {
-                ShippingAddress::where('id', $order->shipping_address_id)->delete();
-            }
-            if ($order->billing_address_id) {
-                BillingAddress::where('id', $order->billing_address_id)->delete();
+            OrderLine::where('order_id', $order->id)->delete();
+            if ($order->order_address_id) {
+                OrderAddress::where('id', $order->order_address_id)->delete();
             }
             $order->delete();
             DB::commit();
             return redirect()->back()->with('success', 'Order and related records deleted successfully.');
         } catch (\Exception $e) {
-            DB::rollback();
+            DB::rollBack();
             return redirect()->back()->with('error', 'Failed to delete order. ' . $e->getMessage());
         }
     }
 
     public function editOrder($id)
     {
-        $order = Orders::with([
+        $order = Order::with([
             'customer',
-            'shippingAddress',
-            'billingAddress',
-            'orderLines.product',
+            'OrderAddress',
+            'orderLine.product',
             'orderStatus'
         ])->findOrFail($id);
 
@@ -93,14 +84,12 @@ class OrderControllerBackend extends Controller
 
 
     public function showOrderDetails(Request $request, $id){
-        $order = Orders::with([
+        $order = Order::with([
             'customer',
             'orderStatus', 
-            'shippingAddress', 
-            'billingAddress', 
-            'orderLines.product', 
-            'orderLines.product.images',
-            'shiprocketCourier'
+            'OrderAddress', 
+            'orderLine.product', 
+            'orderLine.product.images',
         ])
         ->where('id', $id)
         ->first();
@@ -108,77 +97,74 @@ class OrderControllerBackend extends Controller
         return view('backend.manage-order.order-details', compact('order'));
     }
 
-    public function updateOrderStatus(Request $request, $orderId){
+    public function updateOrderStatus(Request $request, $orderId)
+    {
         $request->validate([
-            'order_status_id' => 'required|exists:order_status,id',
-            'customer_id' => 'required|exists:customers,id',
+            'order_status_id' => 'required|exists:order_statuses,id',
         ]);
-    
         DB::beginTransaction();
         try {
+            $order = Order::findOrFail($orderId);
+            $order->update([
+                'order_status_id' => $request->order_status_id,
+            ]);
             $orderStatus = OrderStatus::findOrFail($request->order_status_id);
-            $receiving_date = ($orderStatus->status_name == 'Delivered') ? now() : null;
-    
-            $existingRecord = OrderShipmentRecords::where('order_id', $orderId)
+            $receivingDate = ($orderStatus->status_name === 'Delivered')
+                ? now()
+                : null;
+            $exists = OrderShipmentRecords::where('order_id', $order->id)
                 ->where('order_status_id', $request->order_status_id)
                 ->exists();
-    
-            if (!$existingRecord) {
-                $order = Orders::findOrFail($orderId);
-                $order->order_status_id = $request->order_status_id;
-                $order->save();
-    
+            if (!$exists) {
                 OrderShipmentRecords::create([
-                    'order_id' => $order->id,
-                    'order_status_id' => $request->order_status_id,
-                    'customer_id' => $order->customer_id,
-                    'tracking_no' => null,
-                    'courier_name' => null,
+                    'order_id'         => $order->id,
+                    'order_status_id'  => $request->order_status_id,
+                    'customer_id'      => $order->customer_id,
+                    'tracking_no'      => null,
+                    'courier_name'     => null,
                     'shipment_details' => 'Order status updated',
-                    'shipment_date' => now(),
-                    'receiving_date' => $receiving_date,
+                    'shipment_date'    => now(),
+                    'receiving_date'   => $receivingDate,
                 ]);
-    
-                $message = 'Order status updated successfully and a new shipment record was added!';
+                $message = 'Order status updated and shipment record created successfully.';
             } else {
-                $message = 'Order status updated, but a shipment record for this status already exists!';
+
+                $message = 'Order status updated. Shipment record already exists.';
             }
-    
+
             DB::commit();
+
             return response()->json([
                 'success' => true,
                 'message' => $message,
             ]);
+
         } catch (\Exception $e) {
+
             DB::rollBack();
+
             return response()->json([
                 'success' => false,
-                'message' => 'Something went wrong! Please try again.',
-                'error' => $e->getMessage(),
+                'message' => 'Something went wrong!',
+                'error'   => $e->getMessage(),
             ], 500);
         }
-        
     }
 
     public function downloadInvoice(Request $request, $orderId){
-        $order = Orders::with([
+        $order = Order::with([
             'customer',
-            'orderStatus', 
-            'shippingAddress', 
-            'billingAddress', 
-            'orderLines.product', 
-            'orderLines.product.images',
+            'orderStatus',
+            'OrderAddress',
+            'orderLine.product', 
+            'orderLine.product.images',
             'shiprocketCourier'
         ])->where('id', $orderId)->first();
         if (!$order) {
             abort(404, 'Order not found');
         }
         return view('backend.manage-order.download-invoice', compact('order'));
-        // $pdf = app('dompdf.wrapper');
-        // $pdf->loadView('backend.manage-order.download-invoice', compact('order'));
-    
-        //return $pdf->download('invoice_'.$order->id.'.pdf');
-       // return $pdf->stream('invoice.pdf');
+        
     }
 
     /*---------------------------------------------------------
@@ -192,10 +178,10 @@ class OrderControllerBackend extends Controller
         // ], 500);
         DB::beginTransaction();
         try {
-            $order = Orders::with([
+            $order = Order::with([
                 'customer',
                 'shippingAddress',
-                'orderLines.product',
+                'orderLine.product',
                 'shiprocketCourier'
             ])->findOrFail($id);            
             if (!$order->shippingAddress) {
@@ -349,7 +335,7 @@ class OrderControllerBackend extends Controller
     {
         DB::beginTransaction();
         try {
-            $order = Orders::with(['shiprocketCourier', 'shiprocketOrderResponse'])
+            $order = Order::with(['shiprocketCourier', 'shiprocketOrderResponse'])
                 ->findOrFail($id);
 
             $sr = $order->shiprocketOrderResponse;

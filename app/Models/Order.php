@@ -18,8 +18,7 @@ class Order extends Model
         'payment_received',
         'payment_fail_reason',
         'customer_id',
-        'shipping_address_id',
-        'billing_address_id',
+        'order_address_id',
         'order_status_id',
         'order_cancel_reason',
         'coupon_code',
@@ -44,14 +43,9 @@ class Order extends Model
         return $this->belongsTo(Customer::class, 'customer_id');
     }
 
-    public function shippingAddress()
+    public function orderAddress()
     {
-        return $this->belongsTo(OrderAddress::class, 'shipping_address_id');
-    }
-
-    public function billingAddress()
-    {
-        return $this->belongsTo(OrderAddress::class, 'billing_address_id');
+        return $this->belongsTo(OrderAddress::class, 'order_address_id');
     }
 
     public function orderStatus()
