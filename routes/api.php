@@ -77,17 +77,17 @@ Route::prefix('customer')->group(function () {
             Route::put('/{id}', 'update');
             Route::delete('/{id}', 'destroy');
             Route::patch('/{id}/set-default', 'setDefault');
-        });               
+        }); 
+        Route::controller(WishlistController::class)->group(function () {
+            Route::post('/wishlist/add', 'add');
+            Route::get('/wishlist/list', 'list');
+            Route::delete('/wishlist/{id}', 'remove');
+        }); 
+         
+        Route::get('/orders', [OrderController::class, 'index']);             
     });   
     
     
-});
-Route::middleware(['auth:sanctum'])->group(function () {
-	Route::controller(WishlistController::class)->group(function () {
-		Route::post('/wishlist/add', 'add');
-		Route::get('/wishlist/list', 'list');
-		Route::delete('/wishlist/{id}', 'remove');
-	}); 
 });
 
 Route::prefix('cart')->middleware(['cart.optional-auth'])->group(function () {
