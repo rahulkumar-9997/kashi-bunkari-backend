@@ -8,12 +8,12 @@ use Illuminate\Http\Request;
 
 class OrderController extends Controller
 {
-    public function show(Request $request, $id)
+    public function show(Request $request, $order_number)
     {
         $customer = $request->user();
 
         $order = Order::with(['orderStatus', 'orderAddress', 'orderLine.product.firstSortedImage'])
-            ->where('id', $id)
+            ->where('order_number', $order_number)
             ->first();
 
         if (!$order) {

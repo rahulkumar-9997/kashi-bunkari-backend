@@ -140,7 +140,7 @@ class CheckoutController extends Controller
                     $customer,
                     $addressData,
                     $cartLines,
-                    'online',
+                    'razorpay',
                     false,
                     $razorpayOrder['id'],
                     null,
@@ -337,10 +337,9 @@ class CheckoutController extends Controller
         }
 
         $pendingStatus = OrderStatus::where('slug', 'pending')->first()
-            ?? OrderStatus::orderBy('sort_order')->first();
-
-        $order = Order::create([
-            'order_number' => 'ORD' . now()->format('ymd') . strtoupper(Str::random(6)),
+            ?? OrderStatus::orderBy('sort_order')->first();		
+        $order = Order::create([ 
+            'order_number' => uniqid('TMP'),          
             'order_date' => now(),
             'subtotal' => $subtotal,
             'tax_amount' => 0,
@@ -353,7 +352,10 @@ class CheckoutController extends Controller
             'order_status_id' => $pendingStatus?->id,
             'razorpay_order_id' => $razorpayOrderId,
             'razorpay_payment_id' => $razorpayPaymentId,
-            'order_completed' =>false,
+            'order_completed' => $paymentMode === 'cod' ? true : false,
+        ]);
+        $order->update([
+            'order_number' => 'KB' . now()->format('Y') . str_pad($order->id, 10, '0', STR_PAD_LEFT),
         ]);
 
         foreach ($cartLines as $line) {

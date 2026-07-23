@@ -52,6 +52,12 @@
                 @else
                 <span class="badge bg-light text-dark">Unpaid</span>
                 @endif
+                <br>
+                @if($order->order_completed)
+                    <span class="badge bg-success text-light">Completed</span>
+                @else
+                    <span class="badge bg-warning text-dark">Incomplete</span>
+                @endif
 
             </td>
             <td>{{ $order->orderLine->count() }}</td>
