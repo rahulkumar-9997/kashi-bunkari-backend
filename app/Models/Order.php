@@ -20,6 +20,7 @@ class Order extends Model
         'customer_id',
         'order_address_id',
         'order_status_id',
+        'order_completed',
         'order_cancel_reason',
         'coupon_code',
         'coupon_discount_amount',

@@ -211,6 +211,7 @@ class CheckoutController extends Controller
                 'payment_received' => true,
                 'razorpay_payment_id' => $request->razorpay_payment_id,
                 'payment_fail_reason' => null,
+                'order_completed' =>true
             ]);
         }
 
@@ -239,6 +240,7 @@ class CheckoutController extends Controller
                     'payment_received' => true,
                     'razorpay_payment_id' => $razorpayPaymentId ?? $order->razorpay_payment_id,
                     'payment_fail_reason' => null,
+                    'order_completed' =>true
                 ]);
             }
         } else {
@@ -247,10 +249,6 @@ class CheckoutController extends Controller
 
         return $order->fresh();
     }
-
-    /* =========================================================================
-     |  INTERNAL HELPERS
-     * ========================================================================= */
 
     private function resolveAddressData(Request $request, $customer): ?array
     {
@@ -289,11 +287,6 @@ class CheckoutController extends Controller
         ];
     }
 
-    /**
-     * Order + OrderAddress + OrderLines TURANT banata hai (payment ka wait
-     * nahi karta). Stock turant decrement, cart turant clear — order banne
-     * ka matlab hai items "reserved" ho gaye, chahe payment abhi ho ya nahi.
-     */
     private function createOrder(
         ?Customer $customer,
         array $addressData,
@@ -360,6 +353,7 @@ class CheckoutController extends Controller
             'order_status_id' => $pendingStatus?->id,
             'razorpay_order_id' => $razorpayOrderId,
             'razorpay_payment_id' => $razorpayPaymentId,
+            'order_completed' =>false,
         ]);
 
         foreach ($cartLines as $line) {
