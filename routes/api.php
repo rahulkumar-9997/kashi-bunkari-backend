@@ -13,10 +13,12 @@ use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\WishlistController;
-use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\CheckoutController;
+use App\Http\Controllers\Api\WebhookController;
+use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\AddressController;
 use App\Http\Controllers\Api\StateController;
+
 
 
 Route::get('/user', function (Request $request) {
@@ -96,13 +98,13 @@ Route::prefix('cart')->middleware(['cart.optional-auth'])->group(function () {
     Route::delete('/', [CartController::class, 'clearCart']);
 });
 
-Route::middleware(['cart.optional-auth'])->prefix('payment')->group(function () {
-    Route::post('/create-order', [PaymentController::class, 'createOrder']);
-    Route::post('/verify', [PaymentController::class, 'verifyPayment']);
-});
-
 
 Route::middleware(['cart.optional-auth'])->prefix('checkout')->group(function () {
     Route::post('/place-order', [CheckoutController::class, 'placeOrder']);
     Route::post('/verify-payment', [CheckoutController::class, 'verifyPayment']);
+});
+
+Route::post('/webhooks/razorpay', [WebhookController::class, 'razorpay']);
+Route::middleware(['cart.optional-auth'])->prefix('orders')->group(function () {
+    Route::get('/{id}', [OrderController::class, 'show']);
 });

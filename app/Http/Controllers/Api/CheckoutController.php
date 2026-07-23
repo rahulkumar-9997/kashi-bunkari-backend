@@ -25,20 +25,12 @@ use Razorpay\Api\Errors\SignatureVerificationError;
 class CheckoutController extends Controller
 {
     private const SESSION_KEY = 'cart';
-    private const PENDING_ORDER_TTL_MINUTES = 30;
 
     private function razorpay(): Api
     {
         return new Api(config('services.razorpay.key'), config('services.razorpay.secret'));
     }
 
-    /**
-     * Single entry point for placing an order.
-     * - payment_method = 'cod'      → order created immediately.
-     * - payment_method = 'razorpay' → only a plain Razorpay order is created
-     *   here (standard checkout, no Magic Checkout fields). The local Order
-     *   row is created ONLY after verifyPayment() confirms success.
-     */
     public function placeOrder(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -60,9 +52,7 @@ class CheckoutController extends Controller
         if ($validator->fails()) {
             return response()->json(['success' => false, 'message' => $validator->errors()->first()], 422);
         }
-
         $customer = $request->user();
-
         $addressData = $this->resolveAddressData($request, $customer);
         if (!$addressData) {
             return response()->json(['success' => false, 'message' => 'Please select or enter a valid address.'], 422);
@@ -85,7 +75,6 @@ class CheckoutController extends Controller
             }
         }
 
-        // Logged-in customer chahe to naya address apne address book mein bhi save kar sake
         if ($customer && $request->boolean('save_address') && !$request->input('address_id')) {
             $isFirst = Address::where('customer_id', $customer->id)->doesntExist();
             Address::create(array_merge($addressData, [
@@ -94,16 +83,31 @@ class CheckoutController extends Controller
             ]));
         }
 
+        $isGuest = $customer === null;
+        $email = $request->input('email');
+        $guestCartToken = $this->guestCartToken($request);
+
         if ($request->input('payment_method') === 'cod') {
-            $order = $this->finalizeOrder($request, $customer, $addressData, $cartLines, 'cod', true, null, null, $request->input('email'));
+            $order = $this->createOrder(
+                $customer,
+                $addressData,
+                $cartLines,
+                'cod',
+                false,
+                null,
+                null,
+                $email,
+                $isGuest,
+                $guestCartToken,
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Order placed successfully.',
                 'data' => ['order_id' => $order->id, 'order_number' => $order->order_number],
             ]);
         }
-
-        // payment_method === 'razorpay' — sirf Razorpay order create hoga
+        
         $amountPaise = 0;
         foreach ($cartLines as $line) {
             $offerPricePaise = (int) round(($line['inventory']->offer_rate ?? $line['inventory']->mrp ?? 0) * 100);
@@ -111,50 +115,63 @@ class CheckoutController extends Controller
         }
 
         try {
-            // ✅ STANDARD Razorpay order — Magic Checkout ke koi fields nahi
-            // (no line_items, no line_items_total, no one_click_checkout)
             $razorpayOrder = $this->razorpay()->order->create([
                 'receipt' => 'rcpt_' . ($customer->id ?? 'guest') . '_' . now()->timestamp,
                 'amount' => $amountPaise,
                 'currency' => 'INR',
-                'notes' => ['email' => $request->input('email')],
-            ]);
-
-            Cache::put(
-                'pending_order:' . $razorpayOrder['id'],
-                [
-                    'customer_id' => $customer?->id,
-                    'email' => $request->input('email'),
-                    'address' => $addressData,
-                    'cart_lines' => array_map(fn($l) => [
-                        'product_id' => $l['product_id'],
-                        'quantity' => $l['quantity'],
-                    ], $cartLines),
-                    'is_guest' => $customer === null,
-                    'guest_cart_token' => $this->guestCartToken($request),
-                ],
-                now()->addMinutes(self::PENDING_ORDER_TTL_MINUTES),
-            );
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Razorpay order created.',
-                'data' => [
-                    'order_id' => $razorpayOrder['id'],
-                    'amount' => $amountPaise,
-                    'currency' => 'INR',
-                    'key' => config('services.razorpay.key'),
-                ],
+                'notes' => ['email' => $email],
             ]);
         } catch (\Throwable $e) {
             Log::error('Razorpay order creation failed: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Could not initiate payment. Please try again.'], 500);
         }
+
+        try {
+            $order = DB::transaction(function () use (
+                $customer,
+                $addressData,
+                $cartLines,
+                $email,
+                $isGuest,
+                $guestCartToken,
+                $razorpayOrder
+            ) {
+                return $this->createOrder(
+                    $customer,
+                    $addressData,
+                    $cartLines,
+                    'online',
+                    false,
+                    $razorpayOrder['id'],
+                    null,
+                    $email,
+                    $isGuest,
+                    $guestCartToken,
+                );
+            });
+        } catch (\Throwable $e) {
+            Log::error('Local order creation failed after Razorpay order created: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Could not initiate payment. Please try again.'], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Order created — proceed to payment.',
+            'data' => [
+                'order_id' => $order->id,
+                'order_number' => $order->order_number,
+                'razorpay_order_id' => $razorpayOrder['id'],
+                'amount' => $amountPaise,
+                'currency' => 'INR',
+                'key' => config('services.razorpay.key'),
+            ],
+        ]);
     }
 
     /**
-     * Standard Razorpay Checkout ke handler se call hota hai payment success
-     * hone ke baad. Signature verify karke, tabhi actual Order banti hai.
+     * Frontend Razorpay handler se call hota hai payment success ke baad.
+     * Order ALREADY DB mein hai (placeOrder ke waqt bani thi) — bas
+     * payment_received=true aur razorpay_payment_id UPDATE karte hain.
      */
     public function verifyPayment(Request $request)
     {
@@ -167,6 +184,12 @@ class CheckoutController extends Controller
             return response()->json(['success' => false, 'message' => $validator->errors()->first()], 422);
         }
 
+        $order = Order::where('razorpay_order_id', $request->razorpay_order_id)->first();
+        if (!$order) {
+            Log::error('verifyPayment: no local order found for ' . $request->razorpay_order_id);
+            return response()->json(['success' => false, 'message' => 'Order not found.'], 404);
+        }
+
         try {
             $this->razorpay()->utility->verifyPaymentSignature([
                 'razorpay_order_id' => $request->razorpay_order_id,
@@ -175,66 +198,54 @@ class CheckoutController extends Controller
             ]);
         } catch (SignatureVerificationError $e) {
             Log::warning('Razorpay signature verification failed: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Payment verification failed.'], 400);
-        }
-
-        $pending = Cache::get('pending_order:' . $request->razorpay_order_id);
-        if (!$pending) {
-            Log::error('Pending order payload missing for ' . $request->razorpay_order_id);
-            // Payment already ho chuka hai — customer ko kabhi "failed" mat batao
+            $order->update(['payment_fail_reason' => 'Signature verification failed']);
             return response()->json([
-                'success' => true,
-                'message' => 'Payment received. We are finalizing your order — you will get a confirmation shortly.',
-                'data' => ['order_id' => null],
-            ]);
-        }
-
-        try {
-            $order = DB::transaction(function () use ($pending, $request) {
-                $customer = $pending['customer_id'] ? Customer::find($pending['customer_id']) : null;
-
-                $cartLines = [];
-                foreach ($pending['cart_lines'] as $line) {
-                    $product = Product::find($line['product_id']);
-                    if (!$product) continue;
-                    $cartLines[] = [
-                        'product_id' => $line['product_id'],
-                        'quantity' => $line['quantity'],
-                        'inventory' => $this->resolveCheapestInventory($line['product_id']),
-                        'product' => $product,
-                    ];
-                }
-
-                return $this->finalizeOrder(
-                    $request,
-                    $customer,
-                    $pending['address'],
-                    $cartLines,
-                    'online',
-                    true,
-                    $request->razorpay_order_id,
-                    $request->razorpay_payment_id,
-                    $pending['email'],
-                    $pending['is_guest'],
-                    $pending['guest_cart_token'],
-                );
-            });
-
-            Cache::forget('pending_order:' . $request->razorpay_order_id);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Payment verified successfully.',
+                'success' => false,
+                'message' => 'Payment verification failed.',
                 'data' => ['order_id' => $order->id, 'order_number' => $order->order_number],
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('Order finalization after payment failed: ' . $e->getMessage());
-            return response()->json([
-                'success' => true,
-                'message' => 'Payment received. We are finalizing your order — you will get a confirmation shortly.',
-                'data' => ['order_id' => null],
+            ], 400);
+        }
+
+        if (!$order->payment_received) {
+            $order->update([
+                'payment_received' => true,
+                'razorpay_payment_id' => $request->razorpay_payment_id,
+                'payment_fail_reason' => null,
             ]);
         }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment verified successfully.',
+            'data' => ['order_id' => $order->id, 'order_number' => $order->order_number],
+        ]);
+    }
+
+    /**
+     * Razorpay webhook (payment.captured / payment.failed) se call hota hai.
+     * Order already maujood hai — bas status update karta hai. Idempotent.
+     */
+    public function updatePaymentStatus(string $razorpayOrderId, ?string $razorpayPaymentId, bool $received, ?string $failReason = null): ?Order
+    {
+        $order = Order::where('razorpay_order_id', $razorpayOrderId)->first();
+        if (!$order) {
+            Log::error('Webhook: no local order found for ' . $razorpayOrderId);
+            return null;
+        }
+
+        if ($received) {
+            if (!$order->payment_received) {
+                $order->update([
+                    'payment_received' => true,
+                    'razorpay_payment_id' => $razorpayPaymentId ?? $order->razorpay_payment_id,
+                    'payment_fail_reason' => null,
+                ]);
+            }
+        } else {
+            $order->update(['payment_fail_reason' => $failReason]);
+        }
+
+        return $order->fresh();
     }
 
     /* =========================================================================
@@ -279,11 +290,11 @@ class CheckoutController extends Controller
     }
 
     /**
-     * Logged-in ho to customer already pata hai. Guest ho to email se
-     * Customer table mein dhoondho — mile to wahi, na mile to naya banao.
+     * Order + OrderAddress + OrderLines TURANT banata hai (payment ka wait
+     * nahi karta). Stock turant decrement, cart turant clear — order banne
+     * ka matlab hai items "reserved" ho gaye, chahe payment abhi ho ya nahi.
      */
-    private function finalizeOrder(
-        Request $request,
+    private function createOrder(
         ?Customer $customer,
         array $addressData,
         array $cartLines,
@@ -292,8 +303,8 @@ class CheckoutController extends Controller
         ?string $razorpayOrderId,
         ?string $razorpayPaymentId,
         string $email,
-        ?bool $wasGuest = null,
-        ?string $guestCartTokenOverride = null,
+        bool $isGuest,
+        ?string $guestCartToken,
     ): Order {
         if (!$customer) {
             $customer = Customer::where('email', $email)->first();
@@ -343,7 +354,7 @@ class CheckoutController extends Controller
             'shipping_amount' => 0,
             'grand_total' => $subtotal,
             'payment_mode' => $paymentMode,
-            'payment_received' => $paymentMode === 'cod' ? false : $paymentReceived,
+            'payment_received' => $paymentReceived,
             'customer_id' => $customer->id,
             'order_address_id' => $orderAddress->id,
             'order_status_id' => $pendingStatus?->id,
@@ -372,11 +383,10 @@ class CheckoutController extends Controller
             }
         }
 
-        $isGuest = $wasGuest ?? ($request->user() === null);
         if (!$isGuest) {
             Cart::where('customer_id', $customer->id)->delete();
         } else {
-            $this->clearGuestCart($request, $guestCartTokenOverride);
+            $this->clearGuestCartByToken($guestCartToken);
         }
 
         return $order;
@@ -441,9 +451,8 @@ class CheckoutController extends Controller
         return session(self::SESSION_KEY, []);
     }
 
-    private function clearGuestCart(Request $request, ?string $tokenOverride = null): void
+    private function clearGuestCartByToken(?string $token): void
     {
-        $token = $tokenOverride ?? $this->guestCartToken($request);
         if ($token) {
             Cache::forget($this->guestCartCacheKey($token));
             return;

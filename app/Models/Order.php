@@ -57,4 +57,10 @@ class Order extends Model
     {
         return $this->hasMany(OrderLine::class, 'order_id');
     }
+
+    /* Backward-compat alias agar kahin 'orderLines' plural use ho raha ho */
+    public function orderLines()
+    {
+        return $this->orderLine();
+    }
 }
