@@ -104,5 +104,5 @@ Route::middleware(['cart.optional-auth'])->prefix('checkout')->group(function ()
     Route::post('/verify-payment', [CheckoutController::class, 'verifyPayment']);
 });
 
-Route::get('/order-success/{id}', [OrderController::class, 'show'])->middleware('cart.optional-auth');
+Route::get('/order-success/{orderNumber}', [OrderController::class, 'show'])->middleware('cart.optional-auth');
 Route::post('/webhooks/razorpay', [WebhookController::class, 'razorpay']);
