@@ -51,7 +51,7 @@
         <div class="col-xl-12">
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center gap-1">
-                    <h4 class="card-title flex-grow-1">Invoice ({{ $order->order_id }})</h4>
+                    <h4 class="card-title flex-grow-1">Invoice ({{ $order->order_number }})</h4>
                     <button type="button" class="btn btn-warning pull-right print-btn" onclick="printDiv('printable')">Print</button>
                 </div>
                 <div class="card-body">
@@ -95,85 +95,57 @@
                                         </table>
                                     </td>
                                 </tr>
+
                                 <tr>
                                     <td colspan="3">
                                         <table style="width: 100%; line-height: inherit; text-align: left; border-bottom: solid 1px #ccc;">
                                             <tbody>
                                                 <tr>
-                                                    <td colspan="2" style="padding-bottom: 40px;">
-                                                        <b> Shipping Address: </b> <br>
-                                                        <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                            {{ $order->shippingAddress->full_name ?? 'N/A' }}
-                                                        </p>
-                                                        <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                            {{ $order->shippingAddress->full_address ?? 'N/A' }}
-                                                        </p>
-                                                        @if($order->shippingAddress->apartment)
-                                                        <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                            {{ $order->shippingAddress->apartment ?? 'N/A' }}
-                                                        </p>
-                                                        @endif
-                                                        <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                            {{ $order->shippingAddress->city_name ?? 'N/A' }}, {{ $order->shippingAddress->state ?? 'N/A' }} {{ $order->shippingAddress->pin_code ?? 'N/A' }}
-                                                        </p>
-                                                        <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                            {{ $order->shippingAddress->country ?? 'N/A' }}
-                                                        </p>
-                                                        <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                            {{ $order->shippingAddress->phone_number ?? 'N/A' }}
-                                                        </p>
-                                                    </td>
-                                                    <td style="padding-bottom: 40px;"> <b> Billing Address: </b><br>
-                                                        @if($order->billingAddress)
-                                                        <div>
-                                                            <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                                {{ $order->billingAddress->full_name ?? 'N/A' }}
-                                                            </p>
-                                                            <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                                {{ $order->billingAddress->full_address ?? 'N/A' }}
-                                                            </p>
-                                                             @if($order->billingAddress->apartment)
-                                                            <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                                {{ $order->billingAddress->apartment ?? 'N/A' }}
-                                                            </p>
-                                                            @endif
-                                                            <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                                {{ $order->billingAddress->city_name ?? 'N/A' }},
-                                                                {{ $order->billingAddress->state ?? 'N/A' }}
-                                                                {{ $order->billingAddress->pin_code ?? 'N/A' }}
-                                                            </p>
-                                                            <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                                {{ $order->billingAddress->country ?? 'N/A' }}
-                                                            </p>
-                                                            <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                                {{ $order->billingAddress->phone_number ?? 'N/A' }}
-                                                            </p>
-                                                        </div>
-                                                        @else
-                                                        <div>
-                                                            <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                                {{ $order->shippingAddress->full_name ?? 'N/A' }}
-                                                            </p>
-                                                            <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                                {{ $order->shippingAddress->full_address ?? 'N/A' }}
-                                                            </p>
-                                                            @if($order->shippingAddress->apartment)
-                                                            <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                                {{ $order->shippingAddress->apartment ?? 'N/A' }}
-                                                            </p>
-                                                            @endif
-                                                            <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                                {{ $order->shippingAddress->city_name ?? 'N/A' }}, {{ $order->shippingAddress->state ?? 'N/A' }} {{ $order->shippingAddress->pin_code ?? 'N/A' }}
-                                                            </p>
-                                                            <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                                {{ $order->shippingAddress->country ?? 'N/A' }}
-                                                            </p>
-                                                            <p style="margin-top: 3px; margin-bottom: 3px;">
-                                                                {{ $order->shippingAddress->phone_number ?? 'N/A' }}
-                                                            </p>
-                                                        </div>
-                                                        @endif
+                                                    <td style="padding-bottom: 40px;">
+                                                        <b>Delivery Address:</b><br>
 
+                                                        @if($order->orderAddress)
+
+                                                            <p style="margin:3px 0;">
+                                                                {{ $order->orderAddress->full_name }}
+                                                            </p>
+
+                                                            <p style="margin:3px 0;">
+                                                                {{ $order->orderAddress->address }}
+                                                            </p>
+
+                                                            @if($order->orderAddress->landmark)
+                                                                <p style="margin:3px 0;">
+                                                                    Landmark: {{ $order->orderAddress->landmark }}
+                                                                </p>
+                                                            @endif
+
+                                                            <p style="margin:3px 0;">
+                                                                {{ $order->orderAddress->locality }},
+                                                                {{ $order->orderAddress->city }},
+                                                                {{ $order->orderAddress->state }}
+                                                                - {{ $order->orderAddress->pin_code }}
+                                                            </p>
+
+                                                            <p style="margin:3px 0;">
+                                                                {{ $order->orderAddress->country }}
+                                                            </p>
+
+                                                            <p style="margin:3px 0;">
+                                                                {{ $order->orderAddress->phone_number }}
+                                                            </p>
+
+                                                            @if($order->orderAddress->alternate_phone)
+                                                                <p style="margin:3px 0;">
+                                                                    Alternate Phone: {{ $order->orderAddress->alternate_phone }}
+                                                                </p>
+                                                            @endif
+
+                                                        @else
+
+                                                            <p style="margin:3px 0;">Address not available.</p>
+
+                                                        @endif
                                                     </td>
                                                 </tr>
                                             </tbody>
@@ -198,8 +170,8 @@
                                                         TOTAL AMOUNT (INR)
                                                     </td>
                                                 </tr>
-                                                @if($order->orderLines->isNotEmpty())
-                                                @foreach($order->orderLines as $line)
+                                                @if($order->orderLine->isNotEmpty())
+                                                @foreach($order->orderLine as $line)
                                                 <tr style="border-bottom: 1px solid #eee;">
                                                     <td style="width:25%; padding-bottom: 10px; padding-top: 10px;">
                                                         {{ ucwords(strtolower($line->product->title)) }}
@@ -221,23 +193,18 @@
                                         </table>
                                     </td>
                                 </tr>
-                                <!-- <tr>
-                                    <td colspan="3" align="right" style="padding-top: 5px; padding-bottom: 5px;"> Taxable Amount: <b>Rs. {{ number_format($order->grand_total_amount, 2)	}} </b> </td>
-                                </tr> -->
-                                <!-- <tr>
-                                    <td colspan="3" align="right" style="padding-top: 5px; padding-bottom: 5px;"> GST (@5%): <b>Rs. 305.48 </b> </td>
-                                </tr> -->
+                               
                                 @if($order->shiprocketCourier)
                                 <tr>
                                     <td colspan="3" align="right" style="padding-top: 5px; padding-bottom: 5px;"> Shipping Charges: <b>Rs. {{ $order->shiprocketCourier->courier_shipping_rate }} </b> </td>
                                 </tr>
                                 @endif
                                 <tr>
-                                    <td colspan="3" align="right" style="padding-top: 5px; padding-bottom: 5px;"> Total Amount: <b>Rs. {{ number_format($order->grand_total_amount, 2)	}} </b> </td>
+                                    <td colspan="3" align="right" style="padding-top: 5px; padding-bottom: 5px;"> Total Amount: <b>Rs. {{ number_format($order->grand_total, 2)	}} </b> </td>
                                 </tr>
                                 <tr>
                                     <td colspan="3" align="right" style="padding-top: 5px; padding-bottom: 10px;"><b>Total Amount in Words : </b>
-                                        Rs. {{ numberToWords($order->grand_total_amount) }} Only.
+                                        Rs. {{ numberToWords($order->grand_total) }} Only.
                                     </td>
                                 </tr>
                                 <tr>

@@ -158,12 +158,11 @@ class OrderControllerBackend extends Controller
             'OrderAddress',
             'orderLine.product', 
             'orderLine.product.images',
-            'shiprocketCourier'
         ])->where('id', $orderId)->first();
         if (!$order) {
             abort(404, 'Order not found');
         }
-        return view('backend.manage-order.download-invoice', compact('order'));
+        return view('backend.pages.manage-order.download-invoice', compact('order'));
         
     }
 
