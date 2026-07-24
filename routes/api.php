@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\CustomerAuthController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\SearchController;
+use App\Http\Controllers\Api\QuickViewController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\CheckoutController;
@@ -24,7 +25,7 @@ use App\Http\Controllers\Api\StateController;
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
-
+Route::get('/quick-view/{parentSlug}/{attributeValueSlug?}', [QuickViewController::class, 'show']); 
 Route::get('states', [StateController::class, 'list']);
 Route::get('menu', [MenuController::class, 'menu']);
 Route::get('/home/banner', [HomeController::class, 'banner']);
