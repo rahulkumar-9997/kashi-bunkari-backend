@@ -12,14 +12,13 @@ use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\QuickViewController;
-use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\WishlistController;
 use App\Http\Controllers\Api\CheckoutController;
 use App\Http\Controllers\Api\WebhookController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\AddressController;
 use App\Http\Controllers\Api\StateController;
-
+use App\Http\Controllers\Api\EnquiryController;
 
 
 Route::get('/user', function (Request $request) {
@@ -41,6 +40,10 @@ Route::get('faq', [HomeController::class, 'faq']);
 Route::get('/home/blog', [BlogController::class, 'homeBlogList']);
 Route::get('blog', [BlogController::class, 'blogList']);
 Route::get('blog/{slug}', [BlogController::class, 'blogDetails']);
+Route::post('/contact-form/enquiry', [EnquiryController::class, 'contactEnquiryStore'])->middleware('throttle:5,1');
+
+
+
 Route::get('search-suggestion', [SearchController::class, 'searchSuggestions']);
 Route::get('search', [SearchController::class, 'searchProductList']);
 
@@ -51,10 +54,6 @@ Route::get('products/{product_slug}/{attributes_value}', [ProductController::cla
 Route::get('product-catalog/{category}/{attribute}/{value}', [ProductController::class, 'productCatalog']);
 Route::get('category/{category}', [ProductController::class, 'productCategoryCatalog']);
 Route::get('products/{product_slug}/{attributes_value}', [ProductController::class, 'productDetails']);
-
-Route::post('/contact-submit', [ContactController::class, 'submit']);
-
-
 Route::prefix('customer')->group(function () {
     /* Public APIs */
     Route::controller(CustomerAuthController::class)->group(function () {        
