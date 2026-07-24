@@ -41,6 +41,7 @@ Route::get('/home/blog', [BlogController::class, 'homeBlogList']);
 Route::get('blog', [BlogController::class, 'blogList']);
 Route::get('blog/{slug}', [BlogController::class, 'blogDetails']);
 Route::post('/contact-form/enquiry', [EnquiryController::class, 'contactEnquiryStore'])->middleware('throttle:5,1');
+Route::post('/bulk-form/enquiry', [EnquiryController::class, 'bulkOrderEnquiryStore'])->middleware('throttle:5,1');
 
 
 

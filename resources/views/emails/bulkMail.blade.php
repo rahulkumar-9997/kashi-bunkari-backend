@@ -95,7 +95,7 @@
             </div>
         </div>
         <div class="footer">
-            Sent from the Contact Us form on kasibunkari.com — reply directly to respond to {{ $data['name'] }}.
+            Sent from the Bulk Order form on kasibunkari.com — reply directly to respond to {{ $data['name'] }}.
         </div>
     </div>
 </body>
