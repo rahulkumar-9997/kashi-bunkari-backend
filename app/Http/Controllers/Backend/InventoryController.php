@@ -18,7 +18,14 @@ class InventoryController extends Controller
     public function index(Request $request)
     {
         $data['categories'] = Category::all();
-        $query = Product::with(['images', 'category', 'brand', 'inventories']);
+        $query = Product::with([
+            'images' => function ($query) {
+                $query->select('id', 'product_id', 'image_path')->orderBy('sort_order');
+            }, 
+            'category',
+            'brand',
+            'inventories'
+        ]);
         if ($request->filled('category_id')) {
             $query->where('category_id', $request->category_id);
         }

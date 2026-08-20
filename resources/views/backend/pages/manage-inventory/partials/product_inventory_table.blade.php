@@ -5,7 +5,7 @@
                 <th>No.</th>
                 <th style="width: 20%;">Name</th>
                 <th>HSN Code</th>
-                <!-- <th>Image</th> -->
+                <th>Image</th>
                 <th>Status</th>
                 <th>Category</th>
                 <!--<th>Created Date</th>
@@ -26,14 +26,21 @@
                     <td>
                         {{ $product->hsn_code??'Null' }}
                     </td>
-                    <!-- <td>
-                        @if($product->images->isNotEmpty())
-                            <img src="{{ asset('images/product/thumb/' . $product->images[0]->image_path) }}" class="img-thumbnail" style="width: 70px; height: 70px;" alt="{{ $product->title }}">
+                    <td>
+                        @php
+                            $imagePath = 'images/product/thumb/' . ($product->images[0]->image_path ?? '');
+                        @endphp
+                        @if($product->images->isNotEmpty() && Storage::disk('public')->exists($imagePath))
+                        <img src="{{ asset('storage/' . $imagePath) }}"
+                        class="img-thumbnail"
+                        style="width: 70px; height: 70px;"
+                        alt="{{ $product->title }}">
                         @else
-                            <span>No images.</span>
+                            <span>No image.</span>
                         @endif
+                        <br>
                         
-                    </td> -->
+                    </td>
                     <td>
                         <span class="badge {{ $product->product_status === 1 ? 'bg-success' : 'bg-danger' }}">
                             {{ $product->product_status === 1 ? 'Published' : 'Not Published' }}
