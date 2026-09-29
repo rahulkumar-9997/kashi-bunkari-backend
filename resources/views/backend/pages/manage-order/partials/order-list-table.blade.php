@@ -20,7 +20,7 @@
         @if($orders->isNotEmpty())
         @foreach ($orders as $order)
         <tr>
-            <td>{{ $order->order_id }}</td>
+            <td>{{ $order->order_number }}</td>
             <td>
                 {!! \Carbon\Carbon::parse($order->order_date)->format('d M Y') !!}
                 <br>
