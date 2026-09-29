@@ -31,6 +31,7 @@ use Carbon\Carbon;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\File;
 
+
 class ProductsController extends Controller
 {
     public function index(Request $request){ 
