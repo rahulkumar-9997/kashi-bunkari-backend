@@ -106,7 +106,7 @@ class InventoryController extends Controller
                                             <input type="text" name="offer_rate[]" class="form-control" value="' . $inventory->offer_rate . '">
                                         </td>
                                         <td>
-                                            <input type="text" name="stock_quantity[]" class="form-control" value="' . $inventory->stock_quantity . '" >
+                                            <input type="text" name="stock_quantity[]" class="form-control" value="' . ($inventory->stock_quantity ?? 1) . '">
                                         </td>
                                         <td style="display: none;">
                                             <input type="text" name="sku[]" class="form-control" value="' . $inventory->sku . '" readonly>
@@ -122,16 +122,16 @@ class InventoryController extends Controller
                             $form .= '
                             <tr class="field-group">
                                 <td>
-                                    <input type="text" name="mrp[]" class="form-control" required="">
+                                    <input type="text" name="mrp[]" class="form-control">
                                 </td>
                                 <td>
-                                    <input type="text" name="purchase_rate[]" class="form-control" required="">
+                                    <input type="text" name="purchase_rate[]" class="form-control">
                                 </td>
                                 <td>
-                                    <input type="text" name="offer_rate[]" class="form-control" required="">
+                                    <input type="text" name="offer_rate[]" class="form-control">
                                 </td>
                                 <td>
-                                    <input type="text" name="stock_quantity[]" class="form-control" required="">
+                                    <input type="text" name="stock_quantity[]" class="form-control" value="1">
                                 </td>
                                 <td style="display: none;">
                                     <input type="text" name="sku[]" class="form-control" value="' . $uniqueSku . '" readonly>
@@ -167,33 +167,42 @@ class InventoryController extends Controller
         $product_id = $request->input('product_id');
         $request->validate([
             'product_id' => 'required|exists:products,id',
-            'mrp' => 'required|array|distinct',
-            'mrp.*' => 'required|numeric|min:0',
+            'mrp' => 'required|array',
+            'mrp.*' => 'nullable|numeric|min:0',
             'purchase_rate' => 'required|array',
-            'purchase_rate.*' => 'required|numeric|min:0',
+            'purchase_rate.*' => 'nullable|numeric|min:0',
             'offer_rate' => 'required|array',
-            'offer_rate.*' => 'required|numeric|min:0',
+            'offer_rate.*' => 'nullable|numeric|min:0',
             'stock_quantity' => 'required|array',
-            'stock_quantity.*' => 'required|integer|min:0',
+            'stock_quantity.*' => 'nullable|integer|min:0',
             'sku' => 'required|array',
-            //'sku.*' => 'required|string|unique:inventories,sku',
             'inventory_id' => 'array',
         ]);
-
         $data = [];
         $inventory_ids = $request->input('inventory_id', []);
+        $mrps = $request->input('mrp');
+        $purchaseRates = $request->input('purchase_rate');
+        $offerRates = $request->input('offer_rate');
+        $stockQuantities = $request->input('stock_quantity');
+        $skus = $request->input('sku');
         DB::beginTransaction();
         try {
-            foreach ($request->input('mrp') as $key => $mrp) {
+            foreach ($mrps as $key => $mrp) {
+                $purchaseRate = $purchaseRates[$key] ?? null;
+                $offerRate = $offerRates[$key] ?? null;
+                $stockQuantity = $stockQuantities[$key] ?? null;
+                $sku = $skus[$key] ?? null;
+                if (blank($mrp) && blank($purchaseRate) && blank($offerRate) && blank($stockQuantity)) {
+                    continue;
+                }
                 $inventoryData = [
                     'product_id' => $product_id,
-                    'mrp' => $mrp,
-                    'purchase_rate' => $request->input('purchase_rate')[$key],
-                    'offer_rate' => $request->input('offer_rate')[$key],
-                    'stock_quantity' => $request->input('stock_quantity')[$key],
-                    'sku' => $request->input('sku')[$key],
+                    'mrp' => $mrp !== null && $mrp !== '' ? $mrp : 0,
+                    'purchase_rate' => $purchaseRate !== null && $purchaseRate !== '' ? $purchaseRate : 0,
+                    'offer_rate' => $offerRate !== null && $offerRate !== '' ? $offerRate : 0,
+                    'stock_quantity' => $stockQuantity !== null && $stockQuantity !== '' ? $stockQuantity : 0,
+                    'sku' => $sku,
                 ];
-
                 if (isset($inventory_ids[$key]) && !empty($inventory_ids[$key])) {
                     Inventory::where('id', $inventory_ids[$key])
                         ->where('product_id', $product_id)
@@ -201,6 +210,13 @@ class InventoryController extends Controller
                 } else {
                     $data[] = $inventoryData;
                 }
+            }
+
+            if (empty($data) && empty($inventory_ids)) {
+                DB::commit();
+                return response()->json([
+                    'message' => 'No inventory details were entered, so nothing was saved.',
+                ]);
             }
 
             if (!empty($data)) {
@@ -226,23 +242,26 @@ class InventoryController extends Controller
     
     public function update(Request $request, $id){
         $request->validate([
-            'mrp' => 'required|numeric',
-            'purchase_rate' => 'required|numeric',
-            'offer_rate' => 'required|numeric',
-            'stock_quantity' => 'required|integer',
+            'mrp' => 'nullable|numeric|min:0',
+            'purchase_rate' => 'nullable|numeric|min:0',
+            'offer_rate' => 'nullable|numeric|min:0',
+            'stock_quantity' => 'nullable|integer|min:0',
         ]);
         $inventory = Inventory::findOrFail($id);
+        $mrp = $request->filled('mrp') ? $request->mrp : $inventory->mrp;
+        $purchaseRate = $request->filled('purchase_rate') ? $request->purchase_rate : $inventory->purchase_rate;
+        $offerRate = $request->filled('offer_rate') ? $request->offer_rate : $inventory->offer_rate;
+        $stockQuantity = $request->filled('stock_quantity') ? $request->stock_quantity : $inventory->stock_quantity;
         /*Check if the MRP already exists for the same product_id*/
         $existingInventory = Inventory::where('product_id', $inventory->product_id)
-        ->where('mrp', $request->mrp)
-        ->where('purchase_rate', $request->purchase_rate)
-        ->first();
+            ->where('mrp', $mrp)
+            ->where('purchase_rate', $purchaseRate)
+            ->first();
 
-        /*If the same MRP already exists for this product, don't update the MRP*/
         if ($existingInventory && $existingInventory->id === $inventory->id) {
-            $inventory->purchase_rate = $request->purchase_rate;
-            $inventory->offer_rate = $request->offer_rate;
-            $inventory->stock_quantity = $request->stock_quantity;
+            $inventory->purchase_rate = $purchaseRate;
+            $inventory->offer_rate = $offerRate;
+            $inventory->stock_quantity = $stockQuantity;
             try {
                 $inventory->save();
                 return response()->json([
@@ -255,10 +274,10 @@ class InventoryController extends Controller
                 ], 500);
             }
         } else {
-            $inventory->mrp = $request->mrp;
-            $inventory->purchase_rate = $request->purchase_rate;
-            $inventory->offer_rate = $request->offer_rate;
-            $inventory->stock_quantity = $request->stock_quantity;
+            $inventory->mrp = $mrp;
+            $inventory->purchase_rate = $purchaseRate;
+            $inventory->offer_rate = $offerRate;
+            $inventory->stock_quantity = $stockQuantity;
             try {
                 $inventory->save();
                 return response()->json([

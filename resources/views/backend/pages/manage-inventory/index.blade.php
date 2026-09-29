@@ -174,19 +174,19 @@
             var newRow = `
                 <tr class="field-group">
                     <td>
-                        <input type="text" name="mrp[]" class="form-control" required="">
+                        <input type="text" name="mrp[]" class="form-control">
                     </td>
                     <td>
-                        <input type="text"  name="purchase_rate[]" class="form-control" required="">
+                        <input type="text"  name="purchase_rate[]" class="form-control">
                     </td>
                     <td>
-                        <input type="text" name="offer_rate[]" class="form-control" required="">
+                        <input type="text" name="offer_rate[]" class="form-control">
                     </td>
                     <td>
-                        <input type="text" name="stock_quantity[]" class="form-control" required="">
+                        <input type="text" name="stock_quantity[]" class="form-control" value="1">
                     </td>
                     <td style="display: none;">
-                        <input type="text" name="sku[]" class="form-control" value="${generateUniqueSKU()}" readonly required>
+                        <input type="text" name="sku[]" class="form-control" value="${generateUniqueSKU()}" readonly>
                     </td>
                     <td>
                         <button type="button" class="btn btn-danger btn-sm remove-field">
